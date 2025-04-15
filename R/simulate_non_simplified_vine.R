@@ -258,8 +258,8 @@ struct_mat <- matrix(c(3,3,3,3,
                        1,0,0,0), ncol=4, byrow=TRUE)
 u_test <- simulate_non_simplified(n_samples = 3000,
                                   struct = struct_mat,
-                                  families=list(list("gumbel", "gumbel","gumbel"), list("gumbel","gumbel"), list("gumbel")),
-                                  params = list(c(2), c(1.3), c(2.5)),
+                                  families=list(list("frank", "frank","frank"), list("frank","frank"), list("frank")),
+                                  params = list(c(2), c(1.3), c(1)),
                                   param_cond_func = u_to_param, #for tests: function(u, family) 3
                                   rotations = list(list(0,0,0),list(0,0), list(0)))
 fit.struct_mat<-vinecop(u_test,family_set="onepar",structure=struct_mat)
@@ -289,7 +289,7 @@ current_date <- Sys.Date()
 csv_file_name <- paste0("data/non_simplified_sim_", current_date, ".csv")
 
 # Save as CSV
-write.csv(u_test_2, file = csv_file_name, row.names = FALSE)
+write.csv(u_test, file = csv_file_name, row.names = FALSE)
 
 print(paste("Data saved to", csv_file_name, "\n"))
 
