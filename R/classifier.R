@@ -65,4 +65,4 @@ history <- model$fit(
 
 model$evaluate(x_test,y_test)
 
-plot(history$history$val_accuracy)
+plot(history$history$val_accuracy, ylab="validation accuracy", xlab="epoch")
