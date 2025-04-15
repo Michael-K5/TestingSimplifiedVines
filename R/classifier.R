@@ -47,6 +47,7 @@ model$add(Dense(units = 10L, activation = 'tanh'))
 #model$add(Dropout(rate=0.3))
 model$add(Dense(units = 1L, activation = 'sigmoid'))
 
+# compile the model, define loss, optimizer and metrics
 model$compile(
   loss = 'binary_crossentropy',
   optimizer = 'adam',
