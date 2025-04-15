@@ -269,17 +269,18 @@ pairs_copula_data(u_test)
 struct_mat_2 <- matrix(c(1,1,1,
                          2,2,0,
                          3,0,0), ncol=3, byrow=TRUE)
-u_test_2 <- simulate_non_simplified(n_samples=3000,
+u_test_2 <- simulate_non_simplified(n_samples=5000,
                                     struct = struct_mat_2,
                                     families= list(list("frank", "frank"), list("frank")),
                                     params=list(c(1.3), c(2)),
                                     param_cond_func = u_to_param,
                                     rotations=list(list(0,0), list(0)))
 pairs_copula_data(u_test_2)
-simplified_fit<-vinecop(u_test_2,family_set="onepar",structure=struct_mat_2)
+# see how a fit of a simplified copula looks like
+#simplified_fit<-vinecop(u_test_2,family_set="onepar",structure=struct_mat_2)
 # print.data.frame(summary(fit.struct_mat_2),digit=2)
-temp_test <- rvinecop(2000, simplified_fit)
-pairs_copula_data(temp_test)
+#temp_test <- rvinecop(2000, simplified_fit)
+#pairs_copula_data(temp_test)
 
 # Get the current date in YYYY-MM-DD format
 current_date <- Sys.Date()
