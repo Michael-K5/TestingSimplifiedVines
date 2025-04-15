@@ -55,12 +55,12 @@ model$compile(
 
 model$summary()
 
+# fit the model to the data
 history <- model$fit(
   x_train, y_train,
   epochs = 550L, batch_size = 100L,
   validation_split = 0.2
 )
-
 
 model$evaluate(x_test,y_test)
 
