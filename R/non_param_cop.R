@@ -44,8 +44,4 @@ csv_file_name <- paste0("data/r_values_", current_date, ".csv")
 
 # Save as CSV
 write.csv(r_vals, file = csv_file_name, row.names = FALSE)
-
 print(paste("Data saved to", csv_file_name, "\n"))
-
-
-
