@@ -2,8 +2,11 @@
 library(rvinecopulib)
 library(keras)
 library(tensorflow)
-# load the original data
-csv_filename <- "data/non_simplified_sim_2025-04-16.csv"
+# Parameters to determine, which data to load.
+last_data_simulation_date <- "2025-04-16"
+data_dim <- "3d"
+# load data
+csv_filename <- paste0("data/non_simplified_sim_",data_dim,"_",last_data_simulation_date,".csv")
 orig_data <- as.matrix(read.csv(csv_filename))
 orig_data <- unname(orig_data) #remove col- and rownames
 num_rows <- nrow(orig_data)
@@ -14,6 +17,11 @@ labels <- as.matrix(rep(1L, num_rows))
 # fit a simplified vine
 fitted_vine <-vinecop(orig_data,family_set="onepar")
 print.data.frame(summary(fitted_vine),digit=2)
+# save the fitted_vine
+current_date <- Sys.Date()
+copula_path <- paste0("models/copula_",data_dim,"_", current_date,".rds")
+saveRDS(fitted_vine, file = copula_path)
+# simulate from the simplified vine, to train a classifier later.
 num_samples <- num_rows # number of samples to create from the fitted vine
 simplified_samples <- rvinecop(num_samples, fitted_vine)
 #pairs_copula_data(simplified_samples)
@@ -65,35 +73,22 @@ plot(history)
 # evaluate the model on the test set
 loss_and_metrics <- model %>% evaluate(x_test, y_test)
 
-# compute the value of the non-parametric copula obtained from the simplified fit,
-# together with the classifier
-non_param_cop <- function(obs){
-  predictions <- model %>% predict(obs)
-  r_vals <- predictions/(1-predictions)
-  c_np <- exp(r_vals) * dvinecop(obs, fitted_vine)
-  return(c_np)
-}
-
-# make predictions on the observed Data (orig_data)
-head(orig_data)
-predictions <- model %>% predict(orig_data)
-head(predictions)
-# for binary predictions: binary_predictions <- ifelse(predictions > 0.5, 1, 0)
-
-# here a classifier p(u) was trained on the data. to get the values r(u),
-# with r(u)/(1+r(u)) = p(u), we need to compute r(u) = p(u)/(1-p(u))
-r_vals <- predictions / (1-predictions)
-
-head(r_vals)
-
+# save the model for reusing it later
 # Get the current date in YYYY-MM-DD format
 current_date <- Sys.Date()
-
 # Construct the file name with the date
-csv_file_name <- paste0("data/r_values_", current_date, ".csv")
+model_file_name <- paste0("models/NN_", ncol(x_train), "d_",current_date, ".keras")
+save_model_hdf5(model, filepath = model_file_name)
 
-# Save as CSV
-write.csv(r_vals, file = csv_file_name, row.names = FALSE)
-
-print(paste("Data saved to", csv_file_name, "\n"))
-
+# The syntax for loading and using this model is:
+# loaded_entire_model <- load_model_hdf5("models/NN_3d_2025-04-16.keras")
+# # example for predictions, further training or evaluating the loaded model.
+# predictions <- predict(loaded_entire_model, orig_data)
+# history <- loaded_entire_model %>% fit(
+#   x_train, y_train,
+#   epochs = 2,
+#   batch_size = 100,
+#   validation_split=0.2, # use 20 percent of training data as validation data
+#   verbose = 1 # 0 for slightly faster training (no output), 1 to observe progress while training
+# )
+# loaded_entire_model %>% evaluate(x_test, y_test)
