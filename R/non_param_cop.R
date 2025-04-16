@@ -35,7 +35,7 @@ head(predictions)
 # with r(u)/(1+r(u)) = p(u), we need to compute r(u) = p(u)/(1-p(u))
 r_vals <- predictions / (1-predictions)
 head(r_vals)
-# TODO: perform distribution regression analysis on the r values
+
 # Get the current date in YYYY-MM-DD format
 current_date <- Sys.Date()
 
