@@ -24,7 +24,7 @@ inverse_fisher_transform <- function(T_val){
 # test_T <- fisher_z_transform(test_tau)
 # test_tau_1 = inverse_fisher_transform(test_T)
 # plot(test_tau, test_T)
-# We want tau to be in the range -0.9, +0.9 to avoid numerical problems later on
+# We want tau to be in the range -0.97, +0.97 to avoid numerical problems later on
 tau_min <- - 0.97
 tau_max <- 0.97
 T_min <- fisher_z_transform(tau_min)

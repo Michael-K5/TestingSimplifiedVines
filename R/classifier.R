@@ -81,14 +81,14 @@ model_file_name <- paste0("models/NN_", ncol(x_train), "d_",current_date, ".kera
 save_model_hdf5(model, filepath = model_file_name)
 
 # The syntax for loading and using this model is:
-# loaded_entire_model <- load_model_hdf5("models/NN_3d_2025-04-16.keras")
+# loaded_model <- load_model_hdf5("models/NN_3d_2025-04-16.keras")
 # # example for predictions, further training or evaluating the loaded model.
-# predictions <- predict(loaded_entire_model, orig_data)
-# history <- loaded_entire_model %>% fit(
+# predictions <- predict(loaded_model, orig_data)
+# history <- loaded_model %>% fit(
 #   x_train, y_train,
 #   epochs = 2,
 #   batch_size = 100,
 #   validation_split=0.2, # use 20 percent of training data as validation data
 #   verbose = 1 # 0 for slightly faster training (no output), 1 to observe progress while training
 # )
-# loaded_entire_model %>% evaluate(x_test, y_test)
+# loaded_model %>% evaluate(x_test, y_test)

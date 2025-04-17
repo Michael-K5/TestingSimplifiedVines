@@ -2,7 +2,7 @@ source("R/simulate_non_simplified_vine.R")
 # T values should be between T_min and T_max
 T_min
 T_max
-
+fisher_z
 # TEST
 # test_mat <- matrix(c(1,1,1,
 #                      3,3,0,

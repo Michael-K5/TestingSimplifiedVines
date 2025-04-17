@@ -1,5 +1,8 @@
 # Script for evaluating a non parametric copula estimate
 # Parameters to determine, which model and data to load.
+library(vinereg)
+library(keras)
+library(rvinecopulib)
 last_data_simulation_date <- "2025-04-16"
 last_train_date <- "2025-04-16"
 data_dim <- "3d"
@@ -36,6 +39,25 @@ head(predictions)
 r_vals <- predictions / (1-predictions)
 head(r_vals)
 
+# quantile regression
+obs_data <- data.frame(orig_data)
+q_reg <- vinereg(r_vals ~.,family_set="onepar", data=obs_data)
+quantiles <- predict(q_reg, obs_data, alpha=c(0.05,0.20,0.80,0.95))
+alternative_better <- 0
+simp_better <- 0
+for( i in 1:nrow(quantiles)){
+  if(quantiles[i,2] > 0){
+    alternative_better <- alternative_better + 1
+  } else if (quantiles[i,3] < 0){
+    simp_better <- simp_better +1
+  }
+}
+alternative_better
+simp_better
+nrow(quantiles) - (alternative_better + simp_better)
+
+
+# save r_vals
 # Get the current date in YYYY-MM-DD format
 current_date <- Sys.Date()
 
