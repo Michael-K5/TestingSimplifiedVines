@@ -1,4 +1,6 @@
-# Script for evaluating a non parametric copula estimate
+# Script for performing a quantile regression to test for the simmplifying assumption.
+# Also contains a function for evaluating a non parametric copula estimate
+
 # Parameters to determine, which model and data to load.
 library(vinereg)
 library(keras)
