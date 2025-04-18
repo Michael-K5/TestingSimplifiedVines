@@ -1,4 +1,4 @@
-# Simulate non simplified vine copulas.
+# This script contains functions to simulate from a Non-Simplified Vine Copula
 library(rvinecopulib)
 #' Computes the fisher Z transform (artanh)
 #' @param tau: the value of Kendall's tau to transform to a real number.

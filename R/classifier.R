@@ -1,4 +1,5 @@
-# Fit a simplified vine copula and train a classifier on the data
+# Fit a simplified vine copula and train a classifier on the data, to distinguish between
+# Non-Simplified and Simplified Vine Copula data.
 library(rvinecopulib)
 library(keras)
 library(tensorflow)

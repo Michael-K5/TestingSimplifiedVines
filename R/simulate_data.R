@@ -1,3 +1,5 @@
+# This script simulates non-simplified copula data, using the functions from
+# the script simulate_non_simplified_vine.R
 source("R/simulate_non_simplified_vine.R")
 # T values should be between T_min and T_max
 T_min
