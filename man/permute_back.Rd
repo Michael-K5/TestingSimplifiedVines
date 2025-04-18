@@ -8,7 +8,7 @@ permute_back(simulations, original_order)
 }
 \arguments{
 \item{simulations:}{Matrix with ncol(simulations) = length(original_order)
-The samples from the reordered rvine structure (with antidiagonal values ordered 
+The samples from the reordered rvine structure (with antidiagonal values ordered
 from bottom left to top right)}
 
 \item{original_order:}{The elements on the antidiagonal from bottom left to top right in the original structure}

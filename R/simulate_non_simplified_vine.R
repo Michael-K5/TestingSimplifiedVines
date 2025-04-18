@@ -19,14 +19,9 @@ inverse_fisher_transform <- function(T_val){
   return((exp(2*T_val) - 1)/(exp(2*T_val) + 1))
 }
 
-# roxygen2::roxygenize()
-# test_tau <- 1:99 / 50 -1
-# test_T <- fisher_z_transform(test_tau)
-# test_tau_1 = inverse_fisher_transform(test_T)
-# plot(test_tau, test_T)
-# We want tau to be in the range -0.97, +0.97 to avoid numerical problems later on
-tau_min <- - 0.97
-tau_max <- 0.97
+# tau should be in the range -0.97, +0.97 to avoid numerical problems later on
+tau_min <- - 0.92
+tau_max <- 0.92
 T_min <- fisher_z_transform(tau_min)
 T_max <- fisher_z_transform(tau_max)
 #T_min
@@ -38,9 +33,11 @@ T_max <- fisher_z_transform(tau_max)
 #' @param family: the family of the third copula in the sample
 u_to_param <- function(u, family="gaussian"){
   tryCatch({
-    arg = ifelse(length(u)==1,u,max(u))
-    #T_val <- (T_max - T_min)*arg + T_min # TODO: Define a more sophisticated function here.
-    T_val <- 4*(T_max - T_min) * ((arg-0.5)^2) + T_min
+    #arg = ifelse(length(u)==1,u,max(u))
+    arg=ifelse(length(u)==1,u,mean(u))
+    #T_val <- (T_max - T_min)*arg + T_min
+    T_val <- ifelse(arg > 0.5,T_max,T_min)
+    # T_val <- 4*(T_max - T_min) * ((arg-0.5)^2) + T_min
     tau <- inverse_fisher_transform(T_val)
     param <- ktau_to_par(family=family, tau=tau)
     return(param)
@@ -110,15 +107,14 @@ get_max_matrix <- function(mat){
 #' @param M_mat the matrix \tilde{M}, with \tilde{M_{k,i}} = max_{j=1}^{k}{new_struct_{j,i}}
 #' @param families copula families, formatted as a list of lists
 #' @param params parameters for the first tree, formatted as a list (of vectors)
-#' @param param_cond_func function that maps the u values, which the respective
-#' copula is conditioned on, to a parameter for that copula (needs to be able to handle
-#' different lengths of input from 1 to d-2)
+#' @param param_cond_funcs list of list of functions that maps the u values, which the respective
+#' copula is conditioned on, and a copula family-name to a parameter for that copula
 #' @param rotations rotations of the copulas, formatted as a list of lists.
 simulate_single_sample <- function(new_struct,
                                    M_mat,
                                    families,
                                    params,
-                                   param_cond_func,
+                                   param_cond_funcs,
                                    rotations){
   d <- ncol(new_struct)
   w_row <- runif(d, min=0, max=1)
@@ -142,7 +138,7 @@ simulate_single_sample <- function(new_struct,
         for (temp in 1:(k-1)){
           cond_u_vals[temp] <- V[1,d-new_struct[temp,i]+1]
         }
-        param <- param_cond_func(cond_u_vals, family=families[[k]][[i]])
+        param <- param_cond_funcs[[k-1]][[i]](cond_u_vals, family=families[[k]][[i]])
       }
       cop <- bicop_dist(family=families[[k]][[i]],
                         rotation=rotations[[k]][[i]],
@@ -188,9 +184,8 @@ simulate_single_sample <- function(new_struct,
 #' @param struct rvine-structure matrix
 #' @param families copula families, formatted as a list of lists
 #' @param params parameters for the first tree, formatted as a list (of vectors)
-#' @param param_cond_func function that maps the u values, which the respective
-#' copula is conditioned on, to a parameter for that copula (needs to be able to handle
-#' different lengths of input from 1 to d-2)
+#' @param param_cond_funcs list of list of functions that maps the u values, which the respective
+#' copula is conditioned on, and a copula family-name to a parameter for that copula
 #' @param rotations rotations of the copulas, formatted as a list of lists.
 simulate_non_simplified <- function(n_samples = 500,
                                     struct = matrix(c(1,1,1,
@@ -199,7 +194,7 @@ simulate_non_simplified <- function(n_samples = 500,
                                                     ,byrow=TRUE, ncol=3),
                                     families=list(list("gumbel", "gumbel"), list("gumbel")),
                                     params = list(c(2), c(1.3)),
-                                    param_cond_func = u_to_param,
+                                    param_cond_funcs = list(list(u_to_param)),
                                     rotations = list(list(0,0),list(0))){
   # Reorder the indices, so they have the numbers 1 to d from top right to bottom left on the antidiagonal
   temp <- permute_indices(struct)
@@ -218,7 +213,7 @@ simulate_non_simplified <- function(n_samples = 500,
                            M_mat,
                            families,
                            params,
-                           param_cond_func,
+                           param_cond_funcs,
                            rotations)
     u[sample,] <- u_sample
   }

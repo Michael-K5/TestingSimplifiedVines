@@ -7,7 +7,7 @@
 fisher_z_transform(tau)
 }
 \arguments{
-\item{tau:}{the value of Kendall's tau to transform to a real number. 
+\item{tau:}{the value of Kendall's tau to transform to a real number.
 Can also be a vector of taus.}
 }
 \value{

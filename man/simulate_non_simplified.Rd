@@ -9,7 +9,7 @@ simulate_non_simplified(
   struct = matrix(c(1, 1, 1, 2, 2, 0, 3, 0, 0), byrow = TRUE, ncol = 3),
   families = list(list("gumbel", "gumbel"), list("gumbel")),
   params = list(c(2), c(1.3)),
-  param_cond_func = u_to_param,
+  param_cond_funcs = list(list(u_to_param)),
   rotations = list(list(0, 0), list(0))
 )
 }
@@ -22,9 +22,8 @@ simulate_non_simplified(
 
 \item{params}{parameters for the first tree, formatted as a list (of vectors)}
 
-\item{param_cond_func}{function that maps the u values, which the respective
-copula is conditioned on, to a parameter for that copula (needs to be able to handle
-different lengths of input from 1 to d-2)}
+\item{param_cond_funcs}{list of list of functions that maps the u values, which the respective
+copula is conditioned on, and a copula family-name to a parameter for that copula}
 
 \item{rotations}{rotations of the copulas, formatted as a list of lists.}
 }

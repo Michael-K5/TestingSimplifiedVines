@@ -3,7 +3,7 @@ library(rvinecopulib)
 library(keras)
 library(tensorflow)
 # Parameters to determine, which data to load.
-last_data_simulation_date <- "2025-04-16"
+last_data_simulation_date <- "2025-04-18"
 data_dim <- "3d"
 # load data
 csv_filename <- paste0("data/non_simplified_sim_",data_dim,"_",last_data_simulation_date,".csv")

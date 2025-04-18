@@ -11,7 +11,7 @@ simulate_single_sample(
   M_mat,
   families,
   params,
-  param_cond_func,
+  param_cond_funcs,
   rotations
 )
 }
@@ -25,9 +25,8 @@ increasingly from top right to bottom left.}
 
 \item{params}{parameters for the first tree, formatted as a list (of vectors)}
 
-\item{param_cond_func}{function that maps the u values, which the respective
-copula is conditioned on, to a parameter for that copula (needs to be able to handle
-different lengths of input from 1 to d-2)}
+\item{param_cond_funcs}{list of list of functions that maps the u values, which the respective
+copula is conditioned on, and a copula family-name to a parameter for that copula}
 
 \item{rotations}{rotations of the copulas, formatted as a list of lists.}
 }
