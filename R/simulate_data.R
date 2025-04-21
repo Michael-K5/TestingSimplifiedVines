@@ -28,7 +28,7 @@ struct_mat <- matrix(c(3,3,3,3,
                        2,2,2,0,
                        4,4,0,0,
                        1,0,0,0), ncol=4, byrow=TRUE)
-u_test <- simulate_non_simplified(n_samples = 3000,
+u_test <- simulate_non_simp_parallel(n_samples = 3000,
                                   struct = struct_mat,
                                   families=list(list("frank", "frank","frank"), list("frank","frank"), list("frank")),
                                   params = list(c(2), c(1.3), c(1)),
@@ -56,31 +56,31 @@ pairs_copula_data(u_test_2)
 
 data_dim <- 7
 struct_mat_3 <- matrix(rep(0,data_dim^2), ncol=data_dim)
-params <- list()
-families <- list()
-param_cond_funcs <-list()
-rotations <- list()
+params_3 <- list()
+families_3 <- list()
+param_cond_funcs_3 <-list()
+rotations_3 <- list()
 for(i in 1:data_dim){
   temp_fam <- list()
   temp_param_funcs <- list()
   temp_rotations <- list()
-  params[[i]] <- c(1.3)
+  params_3[[i]] <- c(1.3)
   for(j in 1:(data_dim - i+1)){
     struct_mat_3[i,j] <- i
     temp_fam <- c(temp_fam, "frank")
     temp_param_funcs <- c(temp_param_funcs, u_to_param)
     temp_rotations <- c(temp_rotations, 0)
   }
-  families[[i]] <- temp_fam
-  param_cond_funcs[[i]] <- temp_param_funcs
-  rotations[[i]] <- temp_rotations
+  families_3[[i]] <- temp_fam
+  param_cond_funcs_3[[i]] <- temp_param_funcs
+  rotations_3[[i]] <- temp_rotations
 }
-u_test_3 <- simulate_non_simplified(n_samples=5000,
+u_test_3 <- simulate_non_simp_parallel(n_samples=5000,
                                     struct=struct_mat_3,
-                                    families=families,
-                                    params=params,
-                                    param_cond_funcs=param_cond_funcs,
-                                    rotations = rotations)
+                                    families=families_3,
+                                    params=params_3,
+                                    param_cond_funcs=param_cond_funcs_3,
+                                    rotations = rotations_3)
 pairs_copula_data(u_test_3)
 
 data_to_use <- u_test_3
