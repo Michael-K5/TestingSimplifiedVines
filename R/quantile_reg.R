@@ -5,17 +5,17 @@
 library(vinereg)
 library(keras)
 library(rvinecopulib)
-last_data_simulation_date <- "2025-04-18"
-last_train_date <- "2025-04-18"
-data_dim <- "3d"
+last_data_simulation_date <- "2025-04-21"
+last_train_date <- "2025-04-21"
+data_dim <- "7"
 # load the Neural Network Classifier
-model_path <- paste0("models/NN_", data_dim, "_", last_train_date, ".keras")
+model_path <- paste0("models/NN_", data_dim, "d_", last_train_date, ".keras")
 model <- load_model_hdf5(model_path)
 # load the fitted simplified vine
-cop_path <- paste0("models/copula_",data_dim,"_", last_train_date,".rds")
+cop_path <- paste0("models/copula_",data_dim,"d_", last_train_date,".rds")
 fitted_cop <- readRDS(file = cop_path)
 # load the original data
-csv_filename <- paste0("data/non_simplified_sim_",data_dim,"_",last_data_simulation_date,".csv")
+csv_filename <- paste0("data/non_simplified_sim_",data_dim,"d_",last_data_simulation_date,".csv")
 orig_data <- as.matrix(read.csv(csv_filename))
 orig_data <- unname(orig_data) #remove col- and rownames
 
