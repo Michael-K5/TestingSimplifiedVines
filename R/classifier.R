@@ -4,10 +4,10 @@ library(rvinecopulib)
 library(keras)
 library(tensorflow)
 # Parameters to determine, which data to load.
-last_data_simulation_date <- "2025-04-18"
-data_dim <- "3d"
+last_data_simulation_date <- "2025-04-21"
+data_dim <- "7"
 # load data
-csv_filename <- paste0("data/non_simplified_sim_",data_dim,"_",last_data_simulation_date,".csv")
+csv_filename <- paste0("data/non_simplified_sim_",data_dim,"d_",last_data_simulation_date,".csv")
 orig_data <- as.matrix(read.csv(csv_filename))
 orig_data <- unname(orig_data) #remove col- and rownames
 num_rows <- nrow(orig_data)
@@ -20,7 +20,7 @@ fitted_vine <-vinecop(orig_data,family_set="onepar")
 print.data.frame(summary(fitted_vine),digit=2)
 # save the fitted_vine
 current_date <- Sys.Date()
-copula_path <- paste0("models/copula_",data_dim,"_", current_date,".rds")
+copula_path <- paste0("models/copula_",data_dim,"d_", current_date,".rds")
 saveRDS(fitted_vine, file = copula_path)
 # simulate from the simplified vine, to train a classifier later.
 num_samples <- num_rows # number of samples to create from the fitted vine

@@ -45,7 +45,7 @@ u_test_2 <- simulate_non_simplified(n_samples=5000,
                                     struct = struct_mat_2,
                                     families= list(list("frank", "frank"), list("frank")),
                                     params=list(c(1.3), c(2)),
-                                    param_cond_func = list(list(u_to_param)),
+                                    param_cond_funcs = list(list(u_to_param)),
                                     rotations=list(list(0,0), list(0)))
 pairs_copula_data(u_test_2)
 # see how a fit of a simplified copula looks like
@@ -54,7 +54,36 @@ pairs_copula_data(u_test_2)
 #temp_test <- rvinecop(2000, simplified_fit)
 #pairs_copula_data(temp_test)
 
-data_to_use <- u_test_2
+data_dim <- 7
+struct_mat_3 <- matrix(rep(0,data_dim^2), ncol=data_dim)
+params <- list()
+families <- list()
+param_cond_funcs <-list()
+rotations <- list()
+for(i in 1:data_dim){
+  temp_fam <- list()
+  temp_param_funcs <- list()
+  temp_rotations <- list()
+  params[[i]] <- c(1.3)
+  for(j in 1:(data_dim - i+1)){
+    struct_mat_3[i,j] <- i
+    temp_fam <- c(temp_fam, "frank")
+    temp_param_funcs <- c(temp_param_funcs, u_to_param)
+    temp_rotations <- c(temp_rotations, 0)
+  }
+  families[[i]] <- temp_fam
+  param_cond_funcs[[i]] <- temp_param_funcs
+  rotations[[i]] <- temp_rotations
+}
+u_test_3 <- simulate_non_simplified(n_samples=5000,
+                                    struct=struct_mat_3,
+                                    families=families,
+                                    params=params,
+                                    param_cond_funcs=param_cond_funcs,
+                                    rotations = rotations)
+pairs_copula_data(u_test_3)
+
+data_to_use <- u_test_3
 # Get the current date in YYYY-MM-DD format
 current_date <- Sys.Date()
 data_dim <- paste0(ncol(data_to_use), "d_")
