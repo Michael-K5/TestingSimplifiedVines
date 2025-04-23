@@ -21,3 +21,26 @@ for (i in 1:length(r_vals)){
   }
 }
 
+
+# test uniform margins
+last_data_simulation_date <- "2025-04-21"
+data_dim <- "7"
+# load data
+csv_filename <- paste0("data/non_simplified_sim_",data_dim,"d_",last_data_simulation_date,".csv")
+orig_data <- as.matrix(read.csv(csv_filename))
+orig_data <- unname(orig_data) #remove col- and rownames
+
+for(i in 1:data_dim){
+  hist(orig_data[,i], main = paste("Plot Number", i), probability=TRUE, breaks=seq(0,1,by=0.05))
+}
+breaks <- seq(0,1,by=0.1)
+for(i in 1:data_dim){
+  print(paste(i, "of", data_dim))
+  observed <- table(cut(orig_data[,i], breaks = breaks, include.lowest = TRUE))
+
+  # expected frequency under uniform distribution is same count in each bin
+  expected <- rep(length(orig_data[,i]) / length(observed), length(observed))
+
+  # chi-square test
+  print(chisq.test(x = observed, p = rep(1/length(observed), length(observed))))
+}
