@@ -41,7 +41,23 @@ head(predictions)
 r_vals <- predictions / (1-predictions)
 head(r_vals)
 
-# TODO: implement quantile regression
+# quantile regression
+obs_data <- data.frame(orig_data)
+q_reg <- vinereg(r_vals ~.,family_set="parametric", data=obs_data)
+quantiles <- predict(q_reg, obs_data, alpha=c(0.05,0.95))
+alternative_better <- 0
+simp_better <- 0
+for( i in 1:nrow(quantiles)){
+  if(quantiles[i,1] > 0){
+    alternative_better <- alternative_better + 1
+  } else if (quantiles[i,2] < 0){
+    simp_better <- simp_better +1
+  }
+}
+alternative_better
+simp_better
+nrow(quantiles) - (alternative_better + simp_better)
+# TODO: Test and Format output better.
 
 # save r_vals
 # Get the current date in YYYY-MM-DD format
