@@ -3,6 +3,8 @@
 source("R/simulate_non_simplified_vine.R")
 # T values should be between T_min and T_max
 T_min
+#u_to_param(0.1, family="frank")
+#u_to_param(0.7, family="frank")
 T_max
 # TEST
 # test_tau <- 1:99 / 50 -1
@@ -28,7 +30,7 @@ struct_mat <- matrix(c(3,3,3,3,
                        2,2,2,0,
                        4,4,0,0,
                        1,0,0,0), ncol=4, byrow=TRUE)
-u_test <- simulate_non_simp_parallel(n_samples = 3000,
+u_test <- simulate_non_simp_parallel(n_samples = 5000,
                                   struct = struct_mat,
                                   families=list(list("frank", "frank","frank"), list("frank","frank"), list("frank")),
                                   params = list(c(2), c(1.3), c(1)),
@@ -41,11 +43,11 @@ pairs_copula_data(u_test)
 struct_mat_2 <- matrix(c(1,1,1,
                          2,2,0,
                          3,0,0), ncol=3, byrow=TRUE)
-u_test_2 <- simulate_non_simplified(n_samples=5000,
+u_test_2 <- simulate_non_simp_parallel(n_samples=4000,
                                     struct = struct_mat_2,
                                     families= list(list("frank", "frank"), list("frank")),
                                     params=list(c(1.3), c(2)),
-                                    param_cond_funcs = list(list(u_to_param)),
+                                    param_cond_funcs = list(list(u_to_param)), #u_to_param
                                     rotations=list(list(0,0), list(0)))
 pairs_copula_data(u_test_2)
 # see how a fit of a simplified copula looks like
@@ -54,17 +56,18 @@ pairs_copula_data(u_test_2)
 #temp_test <- rvinecop(2000, simplified_fit)
 #pairs_copula_data(temp_test)
 
-data_dim <- 7
+data_dim <- 5
 struct_mat_3 <- matrix(rep(0,data_dim^2), ncol=data_dim)
 params_3 <- list()
 families_3 <- list()
 param_cond_funcs_3 <-list()
 rotations_3 <- list()
+param_vec <- runif(data_dim, min=1.1, max=3.0)
 for(i in 1:data_dim){
   temp_fam <- list()
   temp_param_funcs <- list()
   temp_rotations <- list()
-  params_3[[i]] <- c(1.3)
+  params_3[[i]] <- c(param_vec[i])
   for(j in 1:(data_dim - i+1)){
     struct_mat_3[i,j] <- i
     temp_fam <- c(temp_fam, "frank")
@@ -82,8 +85,10 @@ u_test_3 <- simulate_non_simp_parallel(n_samples=5000,
                                     param_cond_funcs=param_cond_funcs_3,
                                     rotations = rotations_3)
 pairs_copula_data(u_test_3)
+#fit.struct_mat<-vinecop(u_test_3,family_set="onepar",structure=struct_mat_3)
+#print.data.frame(summary(fit.struct_mat),digit=2)
 
-data_to_use <- u_test_3
+data_to_use <- u_test
 # Get the current date in YYYY-MM-DD format
 current_date <- Sys.Date()
 data_dim <- paste0(ncol(data_to_use), "d_")
@@ -98,3 +103,5 @@ print(paste("Data saved to", csv_file_name, "\n"))
 # temp <- read.csv(csv_file_name, header=TRUE)
 # temp_mat <- as.matrix(temp)
 # nrow(temp_mat)
+
+

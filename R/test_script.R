@@ -23,8 +23,8 @@ for (i in 1:length(r_vals)){
 
 
 # test uniform margins
-last_data_simulation_date <- "2025-04-21"
-data_dim <- "7"
+last_data_simulation_date <- "2025-04-23"
+data_dim <- "4"
 # load data
 csv_filename <- paste0("data/non_simplified_sim_",data_dim,"d_",last_data_simulation_date,".csv")
 orig_data <- as.matrix(read.csv(csv_filename))

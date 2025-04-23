@@ -1,11 +1,12 @@
 # Fit a simplified vine copula and train a classifier on the data, to distinguish between
 # Non-Simplified and Simplified Vine Copula data.
+# TODO: Implement a cross validation approach, instead of just one test set.
 library(rvinecopulib)
 library(keras)
 library(tensorflow)
 # Parameters to determine, which data to load.
-last_data_simulation_date <- "2025-04-21"
-data_dim <- "7"
+last_data_simulation_date <- "2025-04-23"
+data_dim <- "4"
 # load data
 csv_filename <- paste0("data/non_simplified_sim_",data_dim,"d_",last_data_simulation_date,".csv")
 orig_data <- as.matrix(read.csv(csv_filename))

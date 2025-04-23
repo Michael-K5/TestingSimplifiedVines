@@ -21,7 +21,7 @@ inverse_fisher_transform <- function(T_val){
   return((exp(2*T_val) - 1)/(exp(2*T_val) + 1))
 }
 
-# tau should be in the range -0.97, +0.97 to avoid numerical problems later on
+# tau should be in the range -0.92, +0.92 to avoid numerical problems later on
 tau_min <- - 0.92
 tau_max <- 0.92
 T_min <- fisher_z_transform(tau_min)
@@ -47,7 +47,7 @@ u_to_param <- function(u, family="gaussian"){
   error = function(e){
     stop("The function u_to_param only supports families for which ktau_to_par is defined.
          This error likely is thrown, because simulate_non_simplified was called with
-         the default argument for param_cond_func with a family,
+         the default argument for param_cond_funcs with a family,
          for which ktau_to_par is not implemented.")
   })
 }
