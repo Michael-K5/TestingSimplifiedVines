@@ -5,9 +5,9 @@
 library(vinereg)
 library(keras)
 library(rvinecopulib)
-last_data_simulation_date <- "2025-04-21"
-last_train_date <- "2025-04-21"
-data_dim <- "7"
+last_data_simulation_date <- "2025-04-23"
+last_train_date <- "2025-04-23"
+data_dim <- "4"
 # load the Neural Network Classifier
 model_path <- paste0("models/NN_", data_dim, "d_", last_train_date, ".keras")
 model <- load_model_hdf5(model_path)
@@ -41,23 +41,7 @@ head(predictions)
 r_vals <- predictions / (1-predictions)
 head(r_vals)
 
-# quantile regression
-obs_data <- data.frame(orig_data)
-q_reg <- vinereg(r_vals ~.,family_set="onepar", data=obs_data)
-quantiles <- predict(q_reg, obs_data, alpha=c(0.05,0.95))
-alternative_better <- 0
-simp_better <- 0
-for( i in 1:nrow(quantiles)){
-  if(quantiles[i,1] > 0){
-    alternative_better <- alternative_better + 1
-  } else if (quantiles[i,2] < 0){
-    simp_better <- simp_better +1
-  }
-}
-alternative_better
-simp_better
-nrow(quantiles) - (alternative_better + simp_better)
-
+# TODO: implement quantile regression
 
 # save r_vals
 # Get the current date in YYYY-MM-DD format
