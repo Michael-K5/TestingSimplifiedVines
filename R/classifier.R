@@ -31,7 +31,7 @@ simplified_labels <- as.matrix(rep(0L, num_samples))
 
 classifier_data <- rbind(orig_data, simplified_samples)
 classifier_labels <- rbind(labels, simplified_labels)
-
+# TODO: make the following a k-fold cross validation instead (k=5)
 # perform train test split
 train_perc <- 0.8
 num_train <- floor(train_perc * nrow(classifier_data))

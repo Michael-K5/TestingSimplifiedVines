@@ -62,10 +62,8 @@ nrow(quantiles) - (alternative_better + simp_better)
 # save r_vals
 # Get the current date in YYYY-MM-DD format
 current_date <- Sys.Date()
-
 # Construct the file name with the date
 csv_file_name <- paste0("data/r_values_", current_date, ".csv")
-
 # Save as CSV
 write.csv(r_vals, file = csv_file_name, row.names = FALSE)
 print(paste("Data saved to", csv_file_name, "\n"))
