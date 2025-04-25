@@ -6,6 +6,8 @@ T_min
 #u_to_param(0.1, family="frank")
 #u_to_param(0.7, family="frank")
 T_max
+ktau_to_par("clayton",0.1)
+
 # TEST
 # test_tau <- 1:99 / 50 -1
 # test_T <- fisher_z_transform(test_tau)
@@ -24,6 +26,70 @@ T_max
 #                  4,0,0,0), nrow=4, byrow=TRUE)
 # max_mat_test <- get_max_matrix(temp)
 # print(max_mat_test)
+#' maps a u value to the specific parameter for the third copula, by
+#' finding a value on the fisher-z-transform-scale and mapping that back to a parameter
+#' @param u: the samples u value (between 0 and 1)
+#' @param family: the family of the third copula in the sample
+u_to_param_1 <- function(u, family="gaussian"){
+  tryCatch({
+    T_val <- T_min
+    if(length(u) == 1){
+      arg <- u
+      T_val <- (T_max- T_min) * arg + T_min
+    } else if(length(u)==2){
+      arg <- 0.7 * u[1] + 0.3 * u[2]
+      T_val <- (T_max - T_min) * arg + T_min
+    } else if(length(u) == 3){
+      arg <- 0.2 * u[1] + 0.5 * u[2] * 0.3 * u[3]
+      T_val <- (T_max - T_min) * arg + T_min
+    } else if(length(u)==4){
+      arg <- 0.4 * u[1] + 0.4*u[2]+0.1*u[3]+0.1*u[4]
+      T_val <- (T_max - T_min) * arg + T_min
+    } else {
+      arg <- 0.4 *u[1] + 0.2*u[length(u)] + 0.4 * median(u[2:(length(u)-1)])
+      T_val <- (T_max - T_min) * arg + T_min
+    }
+    tau <- inverse_fisher_transform(T_val)
+    param <- ktau_to_par(family=family, tau=tau)
+    return(param)
+  },
+  error = function(e){
+    stop("The function u_to_param_1 only supports families for which ktau_to_par is defined.")
+  })
+}
+
+#' maps a u value to the specific parameter for the third copula, by
+#' finding a value on the fisher-z-transform-scale and mapping that back to a parameter
+#' @param u: the samples u value (between 0 and 1)
+#' @param family: the family of the third copula in the sample
+u_to_param_2 <- function(u, family="gaussian"){
+  tryCatch({
+    T_val <- T_min
+    if(length(u) == 1){
+      arg <- u
+      T_val <- 4*(T_max - T_min) * ((arg-0.5)^2) + T_min
+    } else if(length(u)==2){
+      arg <- 0.7 * u[1] + 0.3 * u[2]
+      T_val <- 4*(T_max - T_min) * ((arg-0.5)^2) + T_min
+    } else if(length(u) == 3){
+      arg <- 0.2 * u[1] + 0.5 * u[2] * 0.3 * u[3]
+      T_val <- 4*(T_max - T_min) * ((arg-0.5)^2) + T_min
+    } else if(length(u)==4){
+      arg <- 0.4 * u[1] + 0.4*u[2]+0.1*u[3]+0.1*u[4]
+      T_val <- 4*(T_max - T_min) * ((arg-0.5)^2) + T_min
+    } else {
+      arg <- 0.4 *u[1] + 0.2*u[length(u)] + 0.4 * median(u[2:(length(u)-1)])
+      T_val <- 4*(T_max - T_min) * ((arg-0.5)^2) + T_min
+    }
+    tau <- inverse_fisher_transform(T_val)
+    param <- ktau_to_par(family=family, tau=tau)
+    return(param)
+  },
+  error = function(e){
+    stop("The function u_to_param_2 only supports families for which ktau_to_par is defined.")
+  })
+}
+
 
 # Simulate Data
 struct_mat <- matrix(c(2,3,2,1,1,
@@ -31,12 +97,18 @@ struct_mat <- matrix(c(2,3,2,1,1,
                        1,1,3,0,0,
                        4,4,0,0,0,
                        5,0,0,0,0), ncol=5, byrow=TRUE)
+family_test <- list(list("frank", "frank","gaussian","frank"), list("frank","gaussian","frank"), list("gaussian", "frank"), list("gaussian"))
+params_test <- list(c(ktau_to_par(family=family_test[[1]][[2]], tau=0.2)),
+                    c(ktau_to_par(family=family_test[[1]][[2]], tau=-0.3)),
+                    c(ktau_to_par(family=family_test[[1]][[3]], tau=0.1)),
+                    c(ktau_to_par(family=family_test[[1]][[4]], tau=-0.1)))
 u_test <- simulate_non_simp_parallel(n_samples = 5000,
                                   struct = struct_mat,
-                                  families=list(list("frank", "frank","frank","frank"), list("frank","frank","frank"), list("frank", "frank"), list("frank")),
-                                  params = list(c(2), c(1.3), c(1), c(1.5)),
-                                  param_cond_funcs = list(list(u_to_param, u_to_param, u_to_param), list(u_to_param, u_to_param), list(u_to_param)), #for tests: function(u, family) 3
+                                  families=family_test,
+                                  params = params_test,
+                                  param_cond_funcs = list(list(u_to_param_1, u_to_param_2, u_to_param_1), list(u_to_param_1, u_to_param_2), list(u_to_param_1)), #for tests: function(u, family) 3
                                   rotations = list(list(0,0,0,0),list(0,0,0), list(0,0), list(0)))
+#head(u_test)
 fit.struct_mat<-vinecop(u_test,family_set="onepar",structure=struct_mat)
 print.data.frame(summary(fit.struct_mat),digit=2)
 pairs_copula_data(u_test)
