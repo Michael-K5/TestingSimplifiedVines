@@ -5,9 +5,9 @@
 library(vinereg)
 library(keras)
 library(rvinecopulib)
-last_data_simulation_date <- "2025-04-23"
-last_train_date <- "2025-04-23"
-data_dim <- "4"
+last_data_simulation_date <- "2025-04-25"
+last_train_date <- "2025-04-25"
+data_dim <- "5"
 # load the Neural Network Classifier
 model_path <- paste0("models/NN_", data_dim, "d_", last_train_date, ".keras")
 model <- load_model_hdf5(model_path)
@@ -44,7 +44,7 @@ head(r_vals)
 # quantile regression
 obs_data <- data.frame(orig_data)
 q_reg <- vinereg(r_vals ~.,family_set="parametric", data=obs_data)
-quantiles <- predict(q_reg, obs_data, alpha=c(0.05,0.95))
+quantiles <- predict(q_reg, obs_data, alpha=c(0.1,0.9))
 alternative_better <- 0
 simp_better <- 0
 for( i in 1:nrow(quantiles)){

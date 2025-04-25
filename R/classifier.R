@@ -5,8 +5,8 @@ library(rvinecopulib)
 library(keras)
 library(tensorflow)
 # Parameters to determine, which data to load.
-last_data_simulation_date <- "2025-04-23"
-data_dim <- "4"
+last_data_simulation_date <- "2025-04-25"
+data_dim <- "5"
 # load data
 csv_filename <- paste0("data/non_simplified_sim_",data_dim,"d_",last_data_simulation_date,".csv")
 orig_data <- as.matrix(read.csv(csv_filename))
@@ -65,7 +65,7 @@ model %>% summary
 # train the model
 history <- model %>% fit(
   x_train, y_train,
-  epochs = 500,
+  epochs = 300,
   batch_size = 100,
   validation_split=0.2, # use 20 percent of training data as validation data
   verbose = 1 # 0 for slightly faster training (no output), 1 to observe progress while training
