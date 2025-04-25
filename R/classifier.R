@@ -17,7 +17,7 @@ labels <- as.matrix(rep(1L, num_rows))
 #pairs_copula_data(orig_data)
 
 # fit a simplified vine
-fitted_vine <-vinecop(orig_data,family_set="onepar")
+fitted_vine <-vinecop(orig_data,family_set="parametric")
 print.data.frame(summary(fitted_vine),digit=2)
 # save the fitted_vine
 current_date <- Sys.Date()
