@@ -35,6 +35,8 @@ T_max <- fisher_z_transform(tau_max)
 #' @param family: the family of the third copula in the sample
 u_to_param <- function(u, family="gaussian"){
   tryCatch({
+    T_min <- fisher_z_transform(tau_min)
+    T_max <- fisher_z_transform(tau_max)
     #arg = ifelse(length(u)==1,u,max(u))
     arg=ifelse(length(u)==1,u,mean(u))
     #T_val <- (T_max - T_min)*arg + T_min
@@ -269,6 +271,8 @@ simulate_non_simp_parallel <- function(n_samples = 500,
                             "ktau_to_par",
                             "T_min",
                             "T_max",
+                            "tau_min",
+                            "tau_max",
                             "fisher_z_transform",
                             "inverse_fisher_transform",
                             "struct",
