@@ -64,3 +64,22 @@ for(i in 1:data_dim){
   # chi-square test
   print(chisq.test(x = observed, p = rep(1/length(observed), length(observed))))
 }
+
+# quantile regression directly on the p-values -> not very good, as the quantiles are
+# then sometimes not in the interval from 0 to 1.
+obs_data <- data.frame(orig_data)
+q_reg_p <- vinereg(predictions ~.,family_set="parametric", data=obs_data)
+p_quantiles <- predict(q_reg_p, obs_data, alpha=c(0.1,0.9))
+simp_not_sufficient <- 0
+simp_sufficient <- 0
+for( i in 1:nrow(p_quantiles)){
+  if(p_quantiles[i,1] > 0.5){
+    simp_not_sufficient <- simp_not_sufficient + 1
+  } else if (p_quantiles[i,2] < 0.5){
+    simp_sufficient <- simp_sufficient +1
+  }
+}
+simp_not_sufficient # model can confidently assess that a sample is non-simplified
+simp_sufficient # model can not detect that a sample is non-simplified
+nrow(p_quantiles) -(simp_not_sufficient + simp_sufficient) # non conclusive observations
+simp_not_sufficient / nrow(p_quantiles) #share of samples where simplified is not sufficient
