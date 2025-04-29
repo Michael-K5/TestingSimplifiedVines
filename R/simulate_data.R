@@ -6,26 +6,7 @@ T_min
 #u_to_param(0.1, family="frank")
 #u_to_param(0.7, family="frank")
 T_max
-ktau_to_par("clayton",0.1)
 
-# TEST
-# test_tau <- 1:99 / 50 -1
-# test_T <- fisher_z_transform(test_tau)
-# test_tau_1 = inverse_fisher_transform(test_T)
-# plot(test_tau, test_T)
-# test_mat <- matrix(c(1,1,1,
-#                      3,3,0,
-#                      2,0,0)
-#                    ,byrow=TRUE, ncol=3)
-# test_result <- permute_indices(test_mat)
-# test_result
-# Test get_max_matrix
-# temp <- matrix(c(1,1,1,1,
-#                  3,2,2,0,
-#                  2,3,0,0,
-#                  4,0,0,0), nrow=4, byrow=TRUE)
-# max_mat_test <- get_max_matrix(temp)
-# print(max_mat_test)
 #' maps a u value to the specific parameter for the third copula, by
 #' finding a value on the fisher-z-transform-scale and mapping that back to a parameter
 #' @param u: the samples u value (between 0 and 1)
@@ -89,7 +70,7 @@ u_to_param_2 <- function(u, family="gaussian"){
     stop("The function u_to_param_2 only supports families for which ktau_to_par is defined.")
   })
 }
-
+ktau_to_par("gaussian",0.1)
 
 # Simulate Data
 struct_mat <- matrix(c(2,3,2,1,1,

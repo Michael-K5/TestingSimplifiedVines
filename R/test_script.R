@@ -1,4 +1,24 @@
-# Script for performing D-vine quantile regression on the r-vals given the original observed data
+# Script to run tests
+# TEST
+# source("R/simulate_non_simplified_vine.R")
+# test_tau <- 1:99 / 50 -1
+# test_T <- fisher_z_transform(test_tau)
+# test_tau_1 = inverse_fisher_transform(test_T)
+# plot(test_tau, test_T)
+# test_mat <- matrix(c(1,1,1,
+#                      3,3,0,
+#                      2,0,0)
+#                    ,byrow=TRUE, ncol=3)
+# test_result <- permute_indices(test_mat)
+# test_result
+# Test get_max_matrix
+# temp <- matrix(c(1,1,1,1,
+#                  3,2,2,0,
+#                  2,3,0,0,
+#                  4,0,0,0), nrow=4, byrow=TRUE)
+# max_mat_test <- get_max_matrix(temp)
+# print(max_mat_test)
+
 library(vinereg)
 # define data
 # testdata -> delete later.
