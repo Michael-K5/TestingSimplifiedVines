@@ -97,7 +97,7 @@ params_test <- list(c(ktau_to_par(family=family_test[[1]][[2]], tau=0.2)),
 param_cond_funcs_test <- list(list(u_to_param_linear(c(1)), u_to_param_linear(c(1)), u_to_param_linear(c(1))),
                               list(u_to_param_linear(c(0.7,0.3)), u_to_param_linear(c(0.4,0.6))),
                               list(u_to_param_linear(c(0.2,0.5,0.3))))
-u_test <- simulate_non_simp_parallel(n_samples = 4000,
+u_test <- simulate_non_simp_parallel(n_samples = 8000,
                                   struct = struct_mat,
                                   families=family_test,
                                   params = params_test,
@@ -112,14 +112,22 @@ struct_mat_1 <- matrix(c(3,3,3,3,
                        2,2,2,0,
                        4,4,0,0,
                        1,0,0,0), ncol=4, byrow=TRUE)
-u_test_1 <- simulate_non_simp_parallel(n_samples = 5000,
+families_1 <- list(list("frank", "gumbel","joe"),
+                   list("clayton","gaussian"),
+                   list("frank"))
+params_1 <- list(c(ktau_to_par(family=families_1[[1]][[2]], tau=0.2)),
+                 c(ktau_to_par(family=families_1[[1]][[2]], tau=-0.3)),
+                 c(ktau_to_par(family=families_1[[1]][[3]], tau=0.1)))
+param_cond_funcs_1 <- list(list(u_to_param_linear(c(1)), u_to_param_linear(c(1))),
+                           list(u_to_param_linear(c(0.4,0.6))))
+u_test_1 <- simulate_non_simp_parallel(n_samples = 8000,
                                      struct = struct_mat_1,
-                                     families=list(list("frank", "frank","frank"), list("frank","frank"), list("frank")),
-                                     params = list(c(2), c(1.3), c(1)),
-                                     param_cond_funcs = list(list(u_to_param, u_to_param), list(u_to_param)), #for tests: function(u, family) 3
+                                     families=families_1,
+                                     params = params_1,
+                                     param_cond_funcs = param_cond_funcs_1,
                                      rotations = list(list(0,0,0),list(0,0), list(0)))
-fit.struct_mat<-vinecop(u_test_1,family_set="onepar",structure=struct_mat)
-print.data.frame(summary(fit.struct_mat),digit=2)
+#fit.struct_mat<-vinecop(u_test_1,family_set="onepar",structure=struct_mat)
+#print.data.frame(summary(fit.struct_mat),digit=2)
 pairs_copula_data(u_test_1)
 
 struct_mat_2 <- matrix(c(1,1,1,
