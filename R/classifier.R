@@ -6,7 +6,7 @@ library(keras)
 library(tensorflow)
 # Parameters to determine, which data to load.
 last_data_simulation_date <- "2025-04-29"
-data_dim <- "5"
+data_dim <- "4"
 # load data
 csv_filename <- paste0("data/non_simplified_sim_",data_dim,"d_",last_data_simulation_date,".csv")
 orig_data <- as.matrix(read.csv(csv_filename))
@@ -47,17 +47,32 @@ y_test <- as.matrix(classifier_labels[-train_idx,])
 
 # definition of the model
 model <- keras_model_sequential() %>%
-  layer_dense(units = 20, activation = 'relu', input_shape = ncol(x_train)) %>%
+  #layer_dense(units = 20, activation = 'relu', input_shape = ncol(x_train)) %>%
+  layer_dense(units = 32, input_shape = ncol(x_train)) %>%
+  layer_activation_leaky_relu(alpha = 0.1) %>%
   #layer_dropout(rate = 0.3) %>% # Dropout layer (for regularization, if necessary)
-  layer_dense(units = 10, activation = 'relu') %>%
+  #layer_dense(units = 10, activation = 'relu') %>%
+  layer_dense(units = 16) %>%
+  layer_activation_leaky_relu(alpha = 0.1) %>%
   layer_dense(units = 1, activation = 'sigmoid') # sigmoid activation, for binary classification
 
+# learning rate scheduler: halves the learning rate every 30 epochs
+lr_schedule <- function(epoch, lr) {
+  if((epoch + 1) %% 30 == 0){
+    return(lr/2)
+  } else {
+    return(lr)
+  }
+}
+
+# create the keras object required for learning rate scheduling
+lr_scheduler <- callback_learning_rate_scheduler(schedule = lr_schedule)
 
 # compile the model, define optimizer, loss and metrics
 model %>% compile(
-  optimizer = keras$optimizers$Adam(learning_rate=1e-3), #'adam'
-  loss = keras$losses$BinaryCrossentropy(), #'binary_crossentropy
-  metrics = keras$metrics$BinaryAccuracy() #c('accuracy)
+  optimizer = keras$optimizers$Adam(learning_rate=1e-2),
+  loss = keras$losses$BinaryCrossentropy(),
+  metrics = keras$metrics$BinaryAccuracy()
 )
 # show model summary
 model %>% summary
@@ -66,9 +81,10 @@ model %>% summary
 history <- model %>% fit(
   x_train, y_train,
   epochs = 500,
-  batch_size = 100,
+  batch_size = 64,
   validation_split=0.2, # use 20 percent of training data as validation data
-  verbose = 1 # 0 for slightly faster training (no output), 1 to observe progress while training
+  verbose = 1, # 0 for slightly faster training (no output), 1 to observe progress while training
+  callbacks=list(lr_scheduler)
 )
 plot(history)
 
