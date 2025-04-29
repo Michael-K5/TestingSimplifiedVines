@@ -5,7 +5,7 @@ library(rvinecopulib)
 library(keras)
 library(tensorflow)
 # Parameters to determine, which data to load.
-last_data_simulation_date <- "2025-04-25"
+last_data_simulation_date <- "2025-04-29"
 data_dim <- "5"
 # load data
 csv_filename <- paste0("data/non_simplified_sim_",data_dim,"d_",last_data_simulation_date,".csv")
@@ -55,9 +55,9 @@ model <- keras_model_sequential() %>%
 
 # compile the model, define optimizer, loss and metrics
 model %>% compile(
-  optimizer = 'adam',
-  loss = 'binary_crossentropy', #
-  metrics = c('accuracy')
+  optimizer = keras$optimizers$Adam(learning_rate=1e-3), #'adam'
+  loss = keras$losses$BinaryCrossentropy(), #'binary_crossentropy
+  metrics = keras$metrics$BinaryAccuracy() #c('accuracy)
 )
 # show model summary
 model %>% summary
@@ -65,7 +65,7 @@ model %>% summary
 # train the model
 history <- model %>% fit(
   x_train, y_train,
-  epochs = 300,
+  epochs = 500,
   batch_size = 100,
   validation_split=0.2, # use 20 percent of training data as validation data
   verbose = 1 # 0 for slightly faster training (no output), 1 to observe progress while training
@@ -80,10 +80,10 @@ loss_and_metrics <- model %>% evaluate(x_test, y_test)
 current_date <- Sys.Date()
 # Construct the file name with the date
 model_file_name <- paste0("models/NN_", ncol(x_train), "d_",current_date, ".keras")
-save_model_hdf5(model, filepath = model_file_name)
-
+#save_model_hdf5(model, filepath = model_file_name)
+keras$Model$save(model, filepath=model_file_name)
 # The syntax for loading and using this model is:
-# loaded_model <- load_model_hdf5("models/NN_3d_2025-04-16.keras")
+# loaded_model <- load_model_hdf5("models/NN_5d_2025-04-29.keras")
 # # example for predictions, further training or evaluating the loaded model.
 # predictions <- predict(loaded_model, orig_data)
 # history <- loaded_model %>% fit(
