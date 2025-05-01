@@ -19,16 +19,33 @@ csv_filename <- paste0("data/non_simplified_sim_",data_dim,"d_",last_data_simula
 orig_data <- as.matrix(read.csv(csv_filename))
 orig_data <- unname(orig_data) #remove col- and rownames
 
+#' sigmoid function \sigma{x} = \frac{1}{1+exp(-x)}
+sigmoid <- function(x){
+  return(1/(1+exp(-x)))
+}
+#' inverse of the sigmoid function
+inverse_sigmoid <- function(p){
+  return(- log(1/p - 1))
+}
 
 # compute the value of the non-parametric copula obtained from the simplified fit,
 # together with the classifier
 non_param_cop <- function(obs){
   predictions <- model %>% predict(obs)
-  r_vals <- predictions/(1-predictions)
+  r_vals <- inverse_sigmoid(predictions)
   c_np <- exp(r_vals) * dvinecop(obs, fitted_cop)
   return(c_np)
 }
+
+#' monte carlo integral of non_param_cop (using importance sampling)
+compute_integral <- function(n_samples){
+  samples <- rvinecop(n_samples, fitted_cop)
+  p_simp <- dvinecop(samples, fitted_cop)
+  p_non_param <- non_param_cop(samples)
+  return(mean(p_non_param/p_simp))
+}
 temp <- non_param_cop(orig_data)
+#compute_integral(50000)
 head(temp)
 
 # make predictions on the observed Data (orig_data)
