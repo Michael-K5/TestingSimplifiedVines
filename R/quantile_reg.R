@@ -7,7 +7,7 @@ library(keras)
 library(rvinecopulib)
 last_data_simulation_date <- "2025-04-29"
 last_train_date <- "2025-04-29"
-data_dim <- "5"
+data_dim <- "4"
 # load the Neural Network Classifier
 model_path <- paste0("models/NN_", data_dim, "d_", last_train_date, ".keras")
 model <- load_model_hdf5(model_path)
@@ -21,8 +21,7 @@ orig_data <- unname(orig_data) #remove col- and rownames
 
 
 # compute the value of the non-parametric copula obtained from the simplified fit,
-# together with the classifier NOTE: This does not work (most likely not normalized
-# and also quite certainly no uniform margins.)
+# together with the classifier
 non_param_cop <- function(obs){
   predictions <- model %>% predict(obs)
   r_vals <- predictions/(1-predictions)
