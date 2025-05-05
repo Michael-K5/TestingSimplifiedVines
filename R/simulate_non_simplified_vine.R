@@ -22,8 +22,8 @@ inverse_fisher_transform <- function(T_val){
 }
 
 # tau should be in the range -0.92, +0.92 to avoid numerical problems later on
-tau_min <- - 0.92
-tau_max <- 0.92
+tau_min <- - 0.6
+tau_max <- 0.6
 T_min <- fisher_z_transform(tau_min)
 T_max <- fisher_z_transform(tau_max)
 #T_min
@@ -51,6 +51,78 @@ u_to_param <- function(u, family="gaussian"){
          This error likely is thrown, because simulate_non_simplified was called with
          the default argument for param_cond_funcs with a family,
          for which ktau_to_par is not implemented.")
+  })
+}
+
+#' takes a vector a and returns a function of u (vector of elements between 0 and 1)
+#' and of a string "family", which corresponds to a copula family.
+#' that function takes the dot product between a and u
+#' and returns a linear function of that dot product.
+#' @param a: a vector which needs to be a convex combination
+#' (i.e. all entries >=0 and they have to sum to 1)
+u_to_param_linear <- function(a){
+  return(function(u, family="gaussian"){
+    tryCatch({
+      T_upper <- fisher_z_transform(tau_max)
+      T_lower <- fisher_z_transform(tau_min)
+      # Onepar families that cannot model negative dependence:
+      # clayton, gumbel, joe
+      if(family %in% c("clayton", "gumbel", "joe")){
+        T_lower <- fisher_z_transform(0.001)
+      }
+      T_val <- T_min
+      if(length(u) == 1){
+        arg <- u
+        T_val <- (T_upper- T_lower) * arg + T_lower
+      } else {
+        arg <- a %*% u
+        T_val <- (T_upper - T_lower) * arg + T_lower
+      }
+      tau <- inverse_fisher_transform(T_val)
+      param <- ktau_to_par(family=family, tau=tau)
+      return(param)
+    },
+    error = function(e){
+      stop(paste0("An error occurred:", e, ". Common causes of an error:
+          The function u_to_param_linear only supports families for which ktau_to_par is defined.
+          The vector a does not have sufficiently many entries."))
+    })
+  })
+}
+
+#' takes a vector a and returns a function of u (vector of elements between 0 and 1)
+#' and of a string "family", which corresponds to a copula family.
+#' that function takes the dot product between a and u
+#' and returns a quadratic function of that dot product.
+#' @param a: a vector which needs to be a convex combination
+#' (i.e. all entries >=0 and they have to sum to 1)
+u_to_param_quadratic <- function(a){
+  return(function(u, family="gaussian"){
+    tryCatch({
+      T_upper <- fisher_z_transform(tau_max)
+      T_lower <- fisher_z_transform(tau_min)
+      # Onepar families that cannot model negative dependence:
+      # clayton, gumbel, joe
+      if(family %in% c("clayton", "gumbel", "joe")){
+        T_lower <- fisher_z_transform(0.01)
+      }
+      T_val <- T_min
+      if(length(u) == 1){
+        arg <- u
+        T_val <- 4*(T_upper- T_lower) * ((arg-0.5)^2) + T_lower
+      } else {
+        arg <- a %*% u
+        T_val <- (T_upper - T_lower) * ((arg-0.5)^2) + T_lower
+      }
+      tau <- inverse_fisher_transform(T_val)
+      param <- ktau_to_par(family=family, tau=tau)
+      return(param)
+    },
+    error = function(e){
+      stop(paste0("An error occurred:", e, ". Common causes of an error:
+          The function u_to_param_quadratic only supports families for which ktau_to_par is defined.
+          The vector a does not have sufficiently many entries."))
+    })
   })
 }
 
