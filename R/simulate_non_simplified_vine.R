@@ -5,36 +5,31 @@ library(pbapply) # library to display a progress bar with parallel sampling
 #' Computes the fisher Z transform (artanh)
 #' @param tau: the value of Kendall's tau to transform to a real number.
 #' Can also be a vector of taus.
-#'
-#' @return The fisher transformation(s) of tau. If tau is a number, this returns a number
+#' @returns The fisher transformation(s) of tau. If tau is a number, this returns a number
 #' if tau was a vector this returns a vector
 fisher_z_transform = function(tau){
   return(1/2 * log((1+tau)/(1-tau)))
 }
 #' Computes the inverse of the fisher Z transform, which is the tanh
 #' @param T_val: The T-value that is supposed to be turned into a Kendall's tau again
-#'
-#' @return The inverse fisher transformation(s) of T_val. If T is a number, this returns a number
+#' @returns The inverse fisher transformation(s) of T_val. If T is a number, this returns a number
 #' if T is a vector this returns a vector
 inverse_fisher_transform <- function(T_val){
   # computes the inverse of the fisher Z transform (tanh)
   return((exp(2*T_val) - 1)/(exp(2*T_val) + 1))
 }
 
-# tau should be in the range -0.92, +0.92 to avoid numerical problems later on
-tau_min <- - 0.6
-tau_max <- 0.6
-T_min <- fisher_z_transform(tau_min)
-T_max <- fisher_z_transform(tau_max)
-#T_min
-#T_max
-
 #' maps a u value to the specific parameter for the third copula, by
 #' finding a value on the fisher-z-transform-scale and mapping that back to a parameter
 #' @param u: the samples u value (between 0 and 1)
 #' @param family: the family of the third copula in the sample
+#' #' @returns A function of u and family, which calculates the parameter of
+#' a copula given the conditioned values.
 u_to_param <- function(u, family="gaussian"){
   tryCatch({
+    # tau should be in the range -0.92, +0.92 to avoid numerical problems later on
+    tau_min <- -0.92
+    tau_max <- 0.92
     T_min <- fisher_z_transform(tau_min)
     T_max <- fisher_z_transform(tau_max)
     #arg = ifelse(length(u)==1,u,max(u))
@@ -60,17 +55,23 @@ u_to_param <- function(u, family="gaussian"){
 #' and returns a linear function of that dot product.
 #' @param a: a vector which needs to be a convex combination
 #' (i.e. all entries >=0 and they have to sum to 1)
-u_to_param_linear <- function(a){
+#' @param tau_lower: Lowest tau value, defaults to -0.92
+#' (should be between -1 and 1 and less than tau_upper)
+#' @param tau_upper: Highest tau value, defaults to 0.92
+#' (should be between -1 and 1 and greater than tau_lower)
+#' @returns A function of u and family, which calculates the parameter of
+#' a copula given the conditioned values.
+u_to_param_linear <- function(a, tau_lower=-0.92, tau_upper=0.92){
   return(function(u, family="gaussian"){
     tryCatch({
-      T_upper <- fisher_z_transform(tau_max)
-      T_lower <- fisher_z_transform(tau_min)
+      T_upper <- fisher_z_transform(tau_upper)
+      T_lower <- fisher_z_transform(tau_lower)
       # Onepar families that cannot model negative dependence:
       # clayton, gumbel, joe
-      if(family %in% c("clayton", "gumbel", "joe")){
+      if(family %in% c("clayton", "gumbel", "joe") && tau_lower <= 0.001){
         T_lower <- fisher_z_transform(0.001)
       }
-      T_val <- T_min
+      T_val <- T_lower
       if(length(u) == 1){
         arg <- u
         T_val <- (T_upper- T_lower) * arg + T_lower
@@ -96,17 +97,23 @@ u_to_param_linear <- function(a){
 #' and returns a quadratic function of that dot product.
 #' @param a: a vector which needs to be a convex combination
 #' (i.e. all entries >=0 and they have to sum to 1)
-u_to_param_quadratic <- function(a){
+#' @param tau_lower: Lowest tau value
+#' (should be between -1 and 1 and less than tau_upper)
+#' @param tau_upper: Highest tau value
+#' (should be between -1 and 1 and greater than tau_lower)
+#' @returns A function of u and family, which calculates the parameter of
+#' a copula given the conditioned values.
+u_to_param_quadratic <- function(a, tau_lower=-0.92, tau_upper=0.92){
   return(function(u, family="gaussian"){
     tryCatch({
-      T_upper <- fisher_z_transform(tau_max)
-      T_lower <- fisher_z_transform(tau_min)
+      T_upper <- fisher_z_transform(tau_lower)
+      T_lower <- fisher_z_transform(tau_upper)
       # Onepar families that cannot model negative dependence:
       # clayton, gumbel, joe
-      if(family %in% c("clayton", "gumbel", "joe")){
-        T_lower <- fisher_z_transform(0.01)
+      if(family %in% c("clayton", "gumbel", "joe") && tau_lower <= 0.001){
+        T_lower <- fisher_z_transform(0.001)
       }
-      T_val <- T_min
+      T_val <- T_lower
       if(length(u) == 1){
         arg <- u
         T_val <- 4*(T_upper- T_lower) * ((arg-0.5)^2) + T_lower
@@ -341,10 +348,6 @@ simulate_non_simp_parallel <- function(n_samples = 500,
                             "bicop_dist",
                             "hbicop",
                             "ktau_to_par",
-                            "T_min",
-                            "T_max",
-                            "tau_min",
-                            "tau_max",
                             "fisher_z_transform",
                             "inverse_fisher_transform",
                             "struct",
