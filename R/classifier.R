@@ -1,18 +1,17 @@
 # Fit a simplified vine copula and train a classifier on the data, to distinguish between
 # Non-Simplified and Simplified Vine Copula data.
-# TODO: Implement a cross validation approach, instead of just one test set.
 library(rvinecopulib)
 library(keras)
 library(tensorflow)
 # Parameters to determine, which data to load.
-last_data_simulation_date <- "2025-04-29"
-data_dim <- "4"
+last_data_simulation_date <- "2025-05-05"
+data_dim <- "5"
 # load data
 csv_filename <- paste0("data/non_simplified_sim_",data_dim,"d_",last_data_simulation_date,".csv")
 orig_data <- as.matrix(read.csv(csv_filename))
 orig_data <- unname(orig_data) #remove col- and rownames
 num_rows <- nrow(orig_data)
-# cast labels as matrix (otherwise this does not work with tensorflow)
+# cast labels as matrix (to ensure compatibility with tensorflow)
 labels <- as.matrix(rep(1L, num_rows))
 #pairs_copula_data(orig_data)
 
@@ -26,12 +25,11 @@ saveRDS(fitted_vine, file = copula_path)
 # simulate from the simplified vine, to train a classifier later.
 num_samples <- num_rows # number of samples to create from the fitted vine
 simplified_samples <- rvinecop(num_samples, fitted_vine)
-#pairs_copula_data(simplified_samples)
+pairs_copula_data(simplified_samples)
 simplified_labels <- as.matrix(rep(0L, num_samples))
 
 classifier_data <- rbind(orig_data, simplified_samples)
 classifier_labels <- rbind(labels, simplified_labels)
-# TODO: make the following a k-fold cross validation instead (k=5)
 # perform train test split
 train_perc <- 0.8
 num_train <- floor(train_perc * nrow(classifier_data))
@@ -40,10 +38,6 @@ x_train <- classifier_data[train_idx,]
 y_train <- as.matrix(classifier_labels[train_idx,])
 x_test <- classifier_data[-train_idx,]
 y_test <- as.matrix(classifier_labels[-train_idx,])
-# head(x_train)
-# head(x_test)
-# head(y_train)
-# head(y_test)
 
 # definition of the model
 model <- keras_model_sequential() %>%
@@ -80,7 +74,7 @@ model %>% summary
 # train the model
 history <- model %>% fit(
   x_train, y_train,
-  epochs = 500,
+  epochs = 400,
   batch_size = 64,
   validation_split=0.2, # use 20 percent of training data as validation data
   verbose = 1, # 0 for slightly faster training (no output), 1 to observe progress while training
@@ -90,6 +84,7 @@ plot(history)
 
 # evaluate the model on the test set
 loss_and_metrics <- model %>% evaluate(x_test, y_test)
+print(loss_and_metrics)
 
 # save the model for reusing it later
 # Get the current date in YYYY-MM-DD format
