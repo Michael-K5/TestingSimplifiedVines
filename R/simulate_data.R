@@ -1,9 +1,6 @@
 # This script simulates non-simplified copula data, using the functions from
 # the script simulate_non_simplified_vine.R
 source("R/simulate_non_simplified_vine.R")
-# T values should be between T_min and T_max
-T_min
-T_max
 
 # Simulate Data
 struct_mat <- matrix(c(2,3,2,1,1,
@@ -15,14 +12,14 @@ family_test <- list(list("frank", "clayton","gaussian","frank"),
                     list("frank","gaussian","joe"),
                     list("gaussian", "gumbel"),
                     list("gaussian"))
-params_test <- list(c(ktau_to_par(family=family_test[[1]][[2]], tau=0.2)),
-                    c(ktau_to_par(family=family_test[[1]][[2]], tau=-0.3)),
-                    c(ktau_to_par(family=family_test[[1]][[3]], tau=0.1)),
-                    c(ktau_to_par(family=family_test[[1]][[4]], tau=-0.1)))
+params_test <- list(c(ktau_to_par(family=family_test[[1]][[1]], tau=-0.2)),
+                    c(ktau_to_par(family=family_test[[1]][[2]], tau=0.3)),
+                    c(ktau_to_par(family=family_test[[1]][[3]], tau=-0.1)),
+                    c(ktau_to_par(family=family_test[[1]][[4]], tau=0.1)))
 param_cond_funcs_test <- list(list(u_to_param_linear(c(1)), u_to_param_linear(c(1)), u_to_param_linear(c(1))),
                               list(u_to_param_linear(c(0.7,0.3)), u_to_param_linear(c(0.4,0.6))),
                               list(u_to_param_linear(c(0.2,0.5,0.3))))
-u_test <- simulate_non_simp_parallel(n_samples = 8000,
+u_test <- simulate_non_simp_parallel(n_samples = 10000,
                                   struct = struct_mat,
                                   families=family_test,
                                   params = params_test,
@@ -33,6 +30,7 @@ u_test <- simulate_non_simp_parallel(n_samples = 8000,
 #print.data.frame(summary(fit.struct_mat),digit=2)
 pairs_copula_data(u_test)
 
+# Simulate different data
 struct_mat_1 <- matrix(c(3,3,3,3,
                        2,2,2,0,
                        4,4,0,0,
@@ -40,10 +38,10 @@ struct_mat_1 <- matrix(c(3,3,3,3,
 families_1 <- list(list("frank", "gumbel","joe"),
                    list("clayton","gaussian"),
                    list("frank"))
-params_1 <- list(c(ktau_to_par(family=families_1[[1]][[2]], tau=0.2)),
-                 c(ktau_to_par(family=families_1[[1]][[2]], tau=-0.3)),
+params_1 <- list(c(ktau_to_par(family=families_1[[1]][[2]], tau=-0.2)),
+                 c(ktau_to_par(family=families_1[[1]][[2]], tau=0.3)),
                  c(ktau_to_par(family=families_1[[1]][[3]], tau=0.1)))
-param_cond_funcs_1 <- list(list(u_to_param_linear(c(1)), u_to_param_linear(c(1))),
+param_cond_funcs_1 <- list(list(u_to_param_linear(c(1)), u_to_param_quadratic(c(1))),
                            list(u_to_param_linear(c(0.4,0.6))))
 u_test_1 <- simulate_non_simp_parallel(n_samples = 8000,
                                      struct = struct_mat_1,
@@ -71,6 +69,7 @@ pairs_copula_data(u_test_2)
 #temp_test <- rvinecop(2000, simplified_fit)
 #pairs_copula_data(temp_test)
 
+# Simulate data of arbitrary dimension
 data_dim <- 5
 struct_mat_3 <- matrix(rep(0,data_dim^2), ncol=data_dim)
 params_3 <- list()
