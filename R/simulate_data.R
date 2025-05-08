@@ -16,10 +16,15 @@ params_test <- list(c(ktau_to_par(family=family_test[[1]][[1]], tau=-0.2)),
                     c(ktau_to_par(family=family_test[[1]][[2]], tau=0.3)),
                     c(ktau_to_par(family=family_test[[1]][[3]], tau=-0.1)),
                     c(ktau_to_par(family=family_test[[1]][[4]], tau=0.1)))
-param_cond_funcs_test <- list(list(u_to_param_linear(c(1)), u_to_param_linear(c(1)), u_to_param_linear(c(1))),
-                              list(u_to_param_linear(c(0.7,0.3)), u_to_param_linear(c(0.4,0.6))),
-                              list(u_to_param_linear(c(0.2,0.5,0.3))))
-u_test <- simulate_non_simp_parallel(n_samples = 10000,
+tau_lower = -0.9
+tau_upper = 0.9
+param_cond_funcs_test <- list(list(u_to_param_linear(c(1), tau_lower=tau_lower, tau_upper=tau_upper),
+                                   u_to_param_linear(c(1), tau_lower=tau_lower, tau_upper=tau_upper),
+                                   u_to_param_linear(c(1), tau_lower=tau_lower, tau_upper=tau_upper)),
+                              list(u_to_param_linear(c(0.7,0.3), tau_lower=tau_lower, tau_upper=tau_upper),
+                                   u_to_param_linear(c(0.4,0.6), tau_lower=tau_lower, tau_upper=tau_upper)),
+                              list(u_to_param_linear(c(0.2,0.5,0.3), tau_lower=tau_lower, tau_upper=tau_upper)))
+u_test <- simulate_non_simp_parallel(n_samples = 50000,
                                   struct = struct_mat,
                                   families=family_test,
                                   params = params_test,

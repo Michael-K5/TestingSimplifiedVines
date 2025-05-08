@@ -4,8 +4,8 @@ library(vinereg)
 library(keras)
 library(rvinecopulib)
 # Parameters to determine, which model and data to load.
-last_data_simulation_date <- "2025-05-05"
-last_train_date <- "2025-05-05"
+last_data_simulation_date <- "2025-05-08"
+last_train_date <- "2025-05-08"
 data_dim <- "5"
 nu <- 1 # T_n/T_c, the ratio of noise to observed samples during training
 # load the Neural Network Classifier
@@ -47,6 +47,7 @@ compute_integral <- function(n_samples, user_info=FALSE){
 }
 temp <- non_param_cop(orig_data)
 int_val <- compute_integral(100000)
+int_val
 temp_norm <- temp / int_val
 
 # make predictions on the observed Data (orig_data)
@@ -68,7 +69,7 @@ g_vals <- log(nu * predictions / (1-predictions)) # G(u, \eta) from the thesis
 obs_data <- data.frame(orig_data)
 qreg_data <- cbind(g_vals, obs_data)
 q_reg <- vinereg(g_vals ~ . ,family_set="parametric", data=qreg_data)
-quantiles <- predict(q_reg, newdata=obs_data, alpha=c(0.05,0.95))
+quantiles <- predict(q_reg, newdata=obs_data, alpha=c(0.1,0.9))
 alternative_better <- 0
 simp_better <- 0
 for( i in 1:nrow(quantiles)){
@@ -91,11 +92,12 @@ alternative_better / nrow(quantiles)
 # }
 # temp
 
+
 # save r_vals
 # Get the current date in YYYY-MM-DD format
 current_date <- Sys.Date()
 # Construct the file name with the date
-csv_file_name <- paste0("data/r_values_",ncol(orig_data),"d_", current_date, ".csv")
+csv_file_name <- paste0("data/g_values_",ncol(orig_data),"d_", current_date, ".csv")
 # Save as CSV
-write.csv(r_vals, file = csv_file_name, row.names = FALSE)
+write.csv(g_vals, file = csv_file_name, row.names = FALSE)
 print(paste("Data saved to", csv_file_name))
