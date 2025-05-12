@@ -121,6 +121,57 @@ u_test <- simulate_non_simp_parallel(n_samples = 10000,
                                      rotations = list(list(0,0,0,0),list(0,0,0), list(0,0), list(0)))
 pairs_copula_data(u_test)
 
+# contour plots for different conditioning values 1d
+conditioning_vals <- c(0.2,0.4,0.6,0.8)
+family_values <- c("frank","gaussian","gumbel", "clayton")
+plot_contours_1d <- function(cond_vals=conditioning_vals, family_vals=family_values){
+  n <- length(cond_vals)
+  m <- length(family_vals)
+  par(mfrow=c(m, n), mar=c(1,1,1,1), oma=c(1.5,1.5,4,1.5))
+  for(i in  1:m){
+    for(j in 1:n){
+      temp_param <- u_to_param_linear(c(1))(cond_vals[j], family=family_vals[i])
+      bicop_cont_dist <- bicop_dist(
+        family=family_vals[i],
+        rotation=0,
+        parameters = temp_param)
+      contour(bicop_cont_dist,margins="norm",
+              main=paste(family_vals[i], round(temp_param,1)),
+              drawlabels=FALSE,
+              axes=FALSE)
+      box()
+    }
+  }
+  mtext("Marginally normalized contour plots", outer = TRUE, cex = 1, line = 2, font=2)
+  mtext("Different families and conditioning values, see titles", outer = TRUE, cex = 0.8, line = 1)
+}
+plot_contours_1d()
+
+conditioning_vals_1 <- c(0.2,0.4,0.6,0.8)
+conditioning_vals_2 <- c(0.2,0.4,0.6,0.8)
+plot_contours_2d <- function(cond_vals_1, cond_vals_2, family_name="frank", weights=c(0.7,0.3)){
+  m <- length(cond_vals_1)
+  n <- length(cond_vals_2)
+  par(mfrow=c(m, n), mar=c(1,1,1,1), oma=c(1.5,1.5,4,1.5))
+  for(i in  1:m){
+    for(j in 1:n){
+      temp_param <- u_to_param_linear(weights)(c(cond_vals_1[i], cond_vals_2[j]), family=family_name)
+      bicop_cont_dist <- bicop_dist(
+        family=family_name,
+        rotation=0,
+        parameters = temp_param)
+      contour(bicop_cont_dist,margins="norm",
+              main=paste("1:", cond_vals_1[i], "2:", cond_vals_2[j]),
+              drawlabels=FALSE,
+              axes=FALSE)
+      box()
+    }
+  }
+  mtext(paste0("Marginally normalized contour plots for the ", family_name, " copula"), outer = TRUE, cex = 1, line = 2, font=2)
+  mtext(paste0("Two conditioning values (see plot titles), weighed with ", weights[1], ", ", weights[2]), outer = TRUE, cex = 0.8, line = 1)
+}
+plot_contours_2d(conditioning_vals_1, conditioning_vals_2)
+
 # own implementation of pairs_copula_data
 df <- data.frame(u_test)
 
