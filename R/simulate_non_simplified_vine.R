@@ -1,5 +1,6 @@
 # This script contains functions to simulate from a Non-Simplified Vine Copula
 library(rvinecopulib)
+library(MASS) # for custom pair copula plot
 library(parallel) # library for parallel processing (allowing faster sampling)
 library(pbapply) # library to display a progress bar with parallel sampling
 #' Computes the fisher Z transform (artanh)
@@ -8,7 +9,7 @@ library(pbapply) # library to display a progress bar with parallel sampling
 #' @returns The fisher transformation(s) of tau. If tau is a number, this returns a number
 #' if tau was a vector this returns a vector
 fisher_z_transform = function(tau){
-  return(1/2 * log((1+tau)/(1-tau)))
+  return(atanh(tau))
 }
 #' Computes the inverse of the fisher Z transform, which is the tanh
 #' @param T_val: The T-value that is supposed to be turned into a Kendall's tau again
@@ -16,7 +17,20 @@ fisher_z_transform = function(tau){
 #' if T is a vector this returns a vector
 inverse_fisher_transform <- function(T_val){
   # computes the inverse of the fisher Z transform (tanh)
-  return((exp(2*T_val) - 1)/(exp(2*T_val) + 1))
+  return(tanh(T_val))
+}
+
+#' Returns scaling_factor * tanh(T_val) + shift
+#' @param T_val: The T-value that is supposed to be turned into a Kendall's tau again
+#' @param scaling_factor: scale the result by this factor if desired. By default,
+#' tanh returns values between -1 and 1. if a scaling_factor is specified, the result is
+#' between - scaling factor and scaling factor
+#' @param shift: shift the result if desired
+#' @returns The inverse fisher transformation(s) of T_val. If T is a number, this returns a number
+#' if T is a vector this returns a vector
+scaled_tanh <- function(T_val, scaling_factor=1.0, shift=0.0){
+  # computes the inverse of the fisher Z transform (tanh)
+  return(scaling_factor * tanh(T_val) + shift)
 }
 
 #' maps a u value to the specific parameter for the third copula, by
@@ -42,10 +56,13 @@ u_to_param <- function(u, family="gaussian"){
     return(param)
   },
   error = function(e){
-    stop("The function u_to_param only supports families for which ktau_to_par is defined.
-         This error likely is thrown, because simulate_non_simplified was called with
-         the default argument for param_cond_funcs with a family,
-         for which ktau_to_par is not implemented.")
+    stop(pasteo0("An error occurred: ",
+    e,
+    ". A typical cause of errors:
+    The function u_to_param only supports families for which ktau_to_par is defined.
+    This error likely is thrown, because simulate_non_simplified was called with
+    the default argument for param_cond_funcs with a family,
+    for which ktau_to_par is not implemented."))
   })
 }
 
@@ -91,7 +108,7 @@ u_to_param_linear <- function(a, tau_lower=-0.92, tau_upper=0.92){
   })
 }
 
-#' takes a vector a and returns a function of u (vector of elements between 0 and 1)
+#' Takes a vector a and returns a function of u (vector of elements between 0 and 1)
 #' and of a string "family", which corresponds to a copula family.
 #' that function takes the dot product between a and u
 #' and returns a quadratic function of that dot product.
@@ -128,6 +145,118 @@ u_to_param_quadratic <- function(a, tau_lower=-0.92, tau_upper=0.92){
     error = function(e){
       stop(paste0("An error occurred:", e, ". Common causes of an error:
           The function u_to_param_quadratic only supports families for which ktau_to_par is defined.
+          The vector a does not have sufficiently many entries."))
+    })
+  })
+}
+
+#' takes a vector a and returns a function of u (vector of elements between 0 and 1)
+#' and of a string "family", which corresponds to a copula family.
+#' that function transforms the values u using qnorm (inverse normal dist.function)
+#' and then builds polynomial terms of degree 2, if dim(u) <=3, else a linear function of these
+#' with a as parameters.
+#' @param a: a vector of weights
+#' @param tau_lower: Lowest tau value
+#' (should be between -1 and 1 and less than tau_upper)
+#' @param tau_upper: Highest tau value
+#' (should be between -1 and 1 and greater than tau_lower)
+#' @returns A function of u and family, which calculates the parameter of
+#' a copula given the conditioned values.
+u_to_param_non_lin <- function(a, tau_lower=-0.92, tau_upper=0.92){
+  return(function(u, family="gaussian"){
+    tryCatch({
+      # define parameters for the scaled tanh, so that the result will be between
+      # tau_lower and tau_upper
+      scaling_factor <- (tau_upper - tau_lower) / 2
+      shift <- (tau_upper + tau_lower) / 2
+      # Onepar families that cannot model negative dependence:
+      # clayton, gumbel, joe
+      if(family %in% c("clayton", "gumbel", "joe") && tau_lower <= 0.001){
+        scaling_factor <- (tau_upper - 0.001) / 2
+        shift <- (tau_upper + 0.001) / 2
+      }
+      arg <- qnorm(u)
+      tau <- 0
+      if(length(u) == 1){
+        temp <- c(arg, arg^2) %*% a
+        tau <- scaled_tanh(temp, scaling_factor=scaling_factor, shift=shift)
+      } else if(length(u)==2) {
+        temp <- c(arg[1], arg[2], arg[1]^2, arg[2]^2, arg[1]*arg[2]) %*% a
+        tau <- scaled_tanh(temp, scaling_factor=scaling_factor, shift=shift)
+      } else if(length(u)==3){
+        temp <- c(arg[1], arg[2], arg[3],
+                  arg[1]^2, arg[2]^2, arg[3]^2,
+                  arg[1]*arg[2], arg[1]*arg[3], arg[2]*arg[3]) %*% a
+        tau <- scaled_tanh(temp, scaling_factor=scaling_factor, shift=shift)
+      }else{
+        # just apply linear function here.
+        tau <- scaled_tanh(a%*%arg, scaling_factor=scaling_Factor, shift=shift)
+      }
+      param <- ktau_to_par(family=family, tau=tau)
+      return(param)
+    },
+    error = function(e){
+      stop(paste0("An error occurred:", e, ". Common causes of an error:
+          The function u_to_param_non_lin only supports families for which ktau_to_par is defined.
+          The vector a does not have sufficiently many entries."))
+    })
+  })
+}
+
+#' takes a vector a and returns a function of u (vector of elements between 0 and 1)
+#' and of a string "family", which corresponds to a copula family.
+#' that function transforms the values u using qnorm (inverse normal dist.function)
+#' and then builds polynomial terms of degree 3, if dim(u) <=3, else a linear function of these
+#' with a as parameters.
+#' @param a: a vector of weights
+#' @param tau_lower: Lowest tau value
+#' (should be between -1 and 1 and less than tau_upper)
+#' @param tau_upper: Highest tau value
+#' (should be between -1 and 1 and greater than tau_lower)
+#' @returns A function of u and family, which calculates the parameter of
+#' a copula given the conditioned values.
+u_to_param_non_lin_cub <- function(a, tau_lower=-0.92, tau_upper=0.92){
+  return(function(u, family="gaussian"){
+    tryCatch({
+      # define parameters for the scaled tanh, so that the result will be between
+      # tau_lower and tau_upper
+      scaling_factor <- (tau_upper - tau_lower) / 2
+      shift <- (tau_upper + tau_lower) / 2
+      # Onepar families that cannot model negative dependence:
+      # clayton, gumbel, joe
+      if(family %in% c("clayton", "gumbel", "joe") && tau_lower <= 0.001){
+        scaling_factor <- (tau_upper - 0.001) / 2
+        shift <- (tau_upper + 0.001) / 2
+      }
+      arg <- qnorm(u)
+      tau <- 0
+      if(length(u) == 1){
+        temp <- c(arg, arg^2, arg^3) %*% a
+        tau <- scaled_tanh(temp, scaling_factor=scaling_factor, shift=shift)
+      } else if(length(u)==2) {
+        temp <- c(arg[1], arg[2],
+                  arg[1]^2, arg[2]^2, arg[1]*arg[2],
+                  arg[1]^3, arg[2]^3,arg[1]^2 * arg[2], arg[1]*arg[2]^2) %*% a
+        tau <- scaled_tanh(temp, scaling_factor=scaling_factor, shift=shift)
+      } else if(length(u)==3){
+        temp <- c(arg[1], arg[2], arg[3],
+                  arg[1]^2, arg[2]^2, arg[3]^2,
+                  arg[1]*arg[2], arg[1]*arg[3], arg[2]*arg[3],
+                  arg[1]^3, arg[2]^3, arg[3]^3,
+                  arg[1]^2*arg[2], arg[1]^2*arg[3],
+                  arg[2]^2*arg[1], arg[2]^2*arg[3],
+                  arg[3]^2*arg[1], arg[3]^2*arg[2], arg[1]*arg[2]*arg[3]) %*% a
+        tau <- scaled_tanh(temp, scaling_factor=scaling_factor, shift=shift)
+      }else{
+        # just apply linear function here.
+        tau <- scaled_tanh(a%*%arg, scaling_factor=scaling_Factor, shift=shift)
+      }
+      param <- ktau_to_par(family=family, tau=tau)
+      return(param)
+    },
+    error = function(e){
+      stop(paste0("An error occurred:", e, ". Common causes of an error:
+          The function u_to_param_non_lin only supports families for which ktau_to_par is defined.
           The vector a does not have sufficiently many entries."))
     })
   })
@@ -350,6 +479,7 @@ simulate_non_simp_parallel <- function(n_samples = 500,
                             "ktau_to_par",
                             "fisher_z_transform",
                             "inverse_fisher_transform",
+                            "scaled_tanh",
                             "struct",
                             "tau_lower",
                             "tau_upper",
@@ -377,4 +507,185 @@ simulate_non_simp_parallel <- function(n_samples = 500,
 }
 
 
+# Plots
+#' marginally normalized contour plots for copulas with different
+#' families and one-dimensional conditioning values
+#' @param cond_vals: The conditioning values
+#' (plotted next to each other in columns)
+#' @param family_vals: The names of the copula families in the rows
+#' @param param_cond_func_1d: The parameter function to use
+#' @param automatic_title: Whether to automatically create a title (TRUE or FALSE)
+#' @param manual_title: Manually enter a title if desired. If this is not "",
+#' then automatic_title is automatically set to FALSE
+#' @param manual_subtitle: Manually enter a subtitle if desired. If this is "",
+#' then an automatic subtitle is set,
+#' if either automatic_title is TRUE or manual_title is not "".
+plot_contours_1d <- function(
+    cond_vals=c(0.2,0.4,0.6,0.8),
+    family_vals=c("frank","gaussian","gumbel", "clayton"),
+    param_cond_func_1d = u_to_param_linear(c(1)),
+    automatic_title=TRUE,
+    manual_title="",
+    manual_subtitle=""){
+  n <- length(cond_vals)
+  m <- length(family_vals)
+  # leave enough space for a title on top of the plots, if desired
+  space_on_top <- 1.5
+  if(automatic_title || manual_title != ""){
+    space_on_top <- 4
+  }
+  par(mfrow=c(m, n), mar=c(1,1,1,1), oma=c(1.5,1.5,space_on_top,1.5))
+  for(i in  1:m){
+    for(j in 1:n){
+      temp_param <- param_cond_func_1d(cond_vals[j], family=family_vals[i])
+      bicop_cont_dist <- bicop_dist(
+        family=family_vals[i],
+        rotation=0,
+        parameters = temp_param)
+      contour(bicop_cont_dist,margins="norm",
+              main=paste(family_vals[i], round(cond_vals[j],2)),
+              drawlabels=FALSE,
+              axes=FALSE)
+      box()
+    }
+  }
+  if(automatic_title && manual_title == ""){
+    mtext("Marginally normalized contour plots", outer = TRUE, cex = 1, line = 2, font=2)
+    if(manual_subtitle==""){
+      mtext("Different families and conditioning values, see titles", outer = TRUE, cex = 0.8, line = 1)
+    } else {
+      mtext(manual_subtitle, outer = TRUE, cex = 0.8, line = 1)
+    }
+  }
+  if(manual_title != ""){
+    mtext(manual_title, outer=TRUE, cex=1, line=2, font=2)
+    if(manual_subtitle==""){
+      mtext("Different families and conditioning values, see titles", outer = TRUE, cex = 0.8, line = 1)
+    } else {
+      mtext(manual_subtitle, outer = TRUE, cex = 0.8, line = 1)
+    }
+  }
+}
+
+#' marginally normalized contour plots for a copula with family family_name
+#' with different two-dimensional conditioning values
+#' @param cond_vals_1: The conditioning values of the first variable
+#' (plotted next to each other in columns)
+#' @param cond_vals_2: The conditioning values of the second variable
+#' (plotted in the rows)
+#' @param family_name: The name of the copula family to use
+#' @param param_cond_func: The parameter function to use
+#' @param automatic_title: Whether an automatically created title
+#' should be plotted.Needs to be TRUE or FALSE.
+#' @param manual_title: Manual Title, if desired. If this is not "", then
+#' automatic_title is automatically set to FALSE.
+#' @param manual_subtitle: Manual Subtitle, if desired. If this is "",
+#' then an automatic subtitle is set,
+#' if either automatic_title is TRUE or manual_title is not "".
+plot_contours_2d <- function(
+    cond_vals_1 = c(0.2,0.4,0.6,0.8),
+    cond_vals_2 = c(0.2,0.4,0.6,0.8),
+    family_name="frank",
+    param_cond_func_2d = u_to_param_linear(c(0.7,0.3)),
+    automatic_title = TRUE,
+    manual_title="",
+    manual_subtitle=""){
+  m <- length(cond_vals_1)
+  n <- length(cond_vals_2)
+  # leave enough space for a title on top of the plots, if desired
+  space_on_top <- 1.5
+  if(automatic_title || manual_title != ""){
+    space_on_top <- 4
+  }
+  par(mfrow=c(m, n), mar=c(1,1,1,1), oma=c(1.5,1.5,space_on_top,1.5))
+  for(i in  1:m){
+    for(j in 1:n){
+      temp_param <- param_cond_func_2d(c(cond_vals_1[i], cond_vals_2[j]), family=family_name)
+      bicop_cont_dist <- bicop_dist(
+        family=family_name,
+        rotation=0,
+        parameters = temp_param)
+      contour(bicop_cont_dist,margins="norm",
+              main=paste("1:", cond_vals_1[i], "2:", cond_vals_2[j]),
+              drawlabels=FALSE,
+              axes=FALSE)
+      box()
+    }
+  }
+  if(automatic_title && manual_title == ""){
+    mtext(paste0("Marginally normalized contour plots for the ", family_name, " copula"),
+          outer = TRUE, cex = 1, line = 2, font=2)
+    if(manual_subtitle==""){
+      mtext("Two conditioning values, see plot titles",
+            outer = TRUE, cex = 0.8, line = 1)
+    } else {
+      mtext(manual_subtitle,
+            outer = TRUE, cex = 0.8, line = 1)
+    }
+  }
+  if(manual_title != ""){
+    mtext(manual_title, outer=TRUE, cex=1, line=2, font=2)
+    if(manual_subtitle==""){
+      mtext("Two conditioning values, see plot titles",
+            outer = TRUE, cex = 0.8, line = 1)
+    } else {
+      mtext(manual_subtitle,
+            outer = TRUE, cex = 0.8, line = 1)
+    }
+  }
+}
+
+
+
+#' Function with similar functionality as the pairs_copula_data function of
+#' the rvinecopulib package. Plots histograms of df on the diagonal,
+#' scatter plots on the upper triangle and
+#' marginally normalized contours on the lower triangle.
+#' @param u_data Data to plot, each dimension needs to be between 0 and 1
+#' @param max_samples Maximum number of samples to consider for the plot
+#' If -1, then all samples are considered.
+#' If >0, then a random sample of max_samples is drawn and considered for the plots
+#' @param plot_emp_ktau Whether to plot the empirical kendall's tau (TRUE or FALSE)
+pairs_copula_data_custom <- function(u_data, max_samples = -1, plot_emp_ktau=FALSE) {
+  df <- u_data
+  if (is.matrix(df)) {
+    df <- as.data.frame(df)
+  }
+  if(!is.data.frame(df) && !is.matrix(df)){
+    stop("u_data needs to be either a dataframe or a matrix")
+  }
+  n <- ncol(df)
+  if(max_samples > 0 && max_samples < n){
+    to_plot_idx <- sample(n,floor(max_samples))
+    df <- u_data[to_plot_idx,]
+  }
+  par(mfrow = c(n, n), mar = c(0, 0, 0, 0), oma = c(1.5, 1.5, 1.5, 1.5))
+  for (i in 1:n) {
+    for (j in 1:n) {
+      if (i == j) {
+        hist(df[[i]], main = "", xlab = "", ylab = "",
+             col = "darkgrey", border = "white", axes=FALSE)
+        box()
+        mtext(paste0("u",i), side = 3, line = -1, adj = 0.5, cex = 0.8, font=2)
+      } else if (i < j) {
+        plot(df[[j]], df[[i]], xlab = "", ylab = "", pch = ".", col = "black", axes=FALSE)
+        if(plot_emp_ktau){
+          emp_k_tau <- cor(df[[j]], df[[i]], method="kendall")
+          mtext(round(emp_k_tau,2), line=-3, col="blue",font=2)
+        }
+        box()
+      } else {
+        # Contour plot using 2D density estimation
+        x <- df[[j]]
+        y <- df[[i]]
+        # convert to R using normal quantile function (yields easier to read contours)
+        x <- qnorm(x)
+        y <- qnorm(y)
+        kde <- MASS::kde2d(x, y, n = 30, lims = c(-3,3,-3,3)) #lims = c(0, 1, 0, 1)
+        contour(kde, nlevels=8,drawlabels = FALSE, xlab = "", ylab = "", axes = FALSE)
+        box()
+      }
+    }
+  }
+}
 
