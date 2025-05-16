@@ -91,6 +91,9 @@ source("R/simulate_non_simplified_vine.R")
 library(rvinecopulib)
 library(MASS)
 
+plot_contours_1d()
+plot_contours_2d()
+plot_contours_2d(family_name="frank", param_cond_func_2d=u_to_param_linear(c(0.1,0.9)), manual_subtitle="Weights of linear function: 0.1,0.9")
 # Simulate Data
 struct_mat <- matrix(c(2,3,2,1,1,
                        3,2,1,2,0,
@@ -120,94 +123,11 @@ u_test <- simulate_non_simp_parallel(n_samples = 10000,
                                      param_cond_funcs = param_cond_funcs_test,
                                      rotations = list(list(0,0,0,0),list(0,0,0), list(0,0), list(0)))
 pairs_copula_data(u_test)
-
-# contour plots for different conditioning values 1d
-conditioning_vals <- c(0.2,0.4,0.6,0.8)
-family_values <- c("frank","gaussian","gumbel", "clayton")
-plot_contours_1d <- function(cond_vals=conditioning_vals, family_vals=family_values){
-  n <- length(cond_vals)
-  m <- length(family_vals)
-  par(mfrow=c(m, n), mar=c(1,1,1,1), oma=c(1.5,1.5,4,1.5))
-  for(i in  1:m){
-    for(j in 1:n){
-      temp_param <- u_to_param_linear(c(1))(cond_vals[j], family=family_vals[i])
-      bicop_cont_dist <- bicop_dist(
-        family=family_vals[i],
-        rotation=0,
-        parameters = temp_param)
-      contour(bicop_cont_dist,margins="norm",
-              main=paste(family_vals[i], round(temp_param,1)),
-              drawlabels=FALSE,
-              axes=FALSE)
-      box()
-    }
-  }
-  mtext("Marginally normalized contour plots", outer = TRUE, cex = 1, line = 2, font=2)
-  mtext("Different families and conditioning values, see titles", outer = TRUE, cex = 0.8, line = 1)
-}
-plot_contours_1d()
-
-conditioning_vals_1 <- c(0.2,0.4,0.6,0.8)
-conditioning_vals_2 <- c(0.2,0.4,0.6,0.8)
-plot_contours_2d <- function(cond_vals_1, cond_vals_2, family_name="frank", weights=c(0.7,0.3)){
-  m <- length(cond_vals_1)
-  n <- length(cond_vals_2)
-  par(mfrow=c(m, n), mar=c(1,1,1,1), oma=c(1.5,1.5,4,1.5))
-  for(i in  1:m){
-    for(j in 1:n){
-      temp_param <- u_to_param_linear(weights)(c(cond_vals_1[i], cond_vals_2[j]), family=family_name)
-      bicop_cont_dist <- bicop_dist(
-        family=family_name,
-        rotation=0,
-        parameters = temp_param)
-      contour(bicop_cont_dist,margins="norm",
-              main=paste("1:", cond_vals_1[i], "2:", cond_vals_2[j]),
-              drawlabels=FALSE,
-              axes=FALSE)
-      box()
-    }
-  }
-  mtext(paste0("Marginally normalized contour plots for the ", family_name, " copula"), outer = TRUE, cex = 1, line = 2, font=2)
-  mtext(paste0("Two conditioning values (see plot titles), weighed with ", weights[1], ", ", weights[2]), outer = TRUE, cex = 0.8, line = 1)
-}
-plot_contours_2d(conditioning_vals_1, conditioning_vals_2)
+pairs_copula_data_custom(u_test)
+pairs_copula_data_custom(u_test, max_samples=2000, plot_emp_ktau=TRUE)
 
 # own implementation of pairs_copula_data
 df <- data.frame(u_test)
-
-# Start the plotting
-pairs_custom <- function(df) {
-  n <- ncol(df)
-  par(mfrow = c(n, n), mar = c(0, 0, 0, 0), oma = c(1.5, 1.5, 1.5, 1.5))
-
-  for (i in 1:n) {
-    for (j in 1:n) {
-      if (i == j) {
-        hist(df[[i]], main = "", xlab = "", ylab = "",
-             col = "darkgrey", border = "white", axes=FALSE)
-        box()
-        mtext(paste0("u",i), side = 3, line = -1, adj = 0.5, cex = 0.8, font=2)
-      } else if (i < j) {
-        plot(df[[j]], df[[i]], xlab = "", ylab = "", pch = ".", col = "black", axes=FALSE)
-        box()
-      } else {
-        # Contour plot using 2D density estimation
-        x <- df[[j]]
-        y <- df[[i]]
-        # convert to R using normal quantile function (yields easier to read contours)
-        x <- qnorm(x)
-        y <- qnorm(y)
-        kde <- MASS::kde2d(x, y, n = 30, lims = c(-3, 3, -3, 3)) #lims = c(0, 1, 0, 1)
-        contour(kde, nlevels=8,drawlabels = FALSE, xlab = "", ylab = "", axes = FALSE)
-        box()
-      }
-    }
-  }
-}
-
-# Run the custom plotting function
-pairs_custom(df)
-
 
 # Plot trees of copula structures
 library(ggraph)
@@ -239,3 +159,44 @@ d_vine_struct_5d <- matrix(c(4,3,2,1,1,
                              5,0,0,0,0), ncol=5, byrow=TRUE)
 dvine_tree_struct <- rvine_matrix(d_vine_struct_5d)
 plot(dvine_tree_struct,1:4)
+
+temp_struct <- matrix(c(3, 2, 3 , 4 , 4 ,
+2 , 3 , 4 , 3 , 0 ,
+4 , 4 , 2 , 0 , 0 ,
+1 , 1 , 0 , 0 , 0 ,
+5 , 0 , 0 , 0 , 0), ncol=5, byrow=TRUE)
+plot(rvine_matrix(temp_struct),1:4)
+
+
+# Test tanh
+x <- -10000:10000 / 10
+y1 <- tanh(x)
+y2 <- inverse_fisher_transform(x)
+plot(y1,y2)
+par(mfrow=c(1,1))
+plot(x,y1)
+plot(x,y2)
+plot(x,atanh(y1))
+
+sigmoid_fun <- function(temp){
+  return(1/(1+exp(-temp)))
+}
+
+sigmoid_inv <- function(temp){
+  return(-log(1/temp  -1))
+}
+
+x <- -1000:1000 / 10
+plot(x, sigmoid_inv(sigmoid_fun(x)))
+sigmoid_fun(10)
+sigmoid_inv(sigmoid_fun(10))
+sigmoid_fun(10000)
+
+y <- c(0.1,0.2,0.6)
+qnorm(y)
+
+matrix(poly(y, degree=2,simple=TRUE,raw=TRUE))
+a <- 2
+b <- 3
+data <- data.frame(a = a, b = b)
+model.matrix(~ poly(a, b, degree = 2, raw = TRUE), data)
