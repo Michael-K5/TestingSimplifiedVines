@@ -8,6 +8,7 @@ struct_mat <- matrix(c(2,3,2,1,1,
                        1,1,3,0,0,
                        4,4,0,0,0,
                        5,0,0,0,0), ncol=5, byrow=TRUE)
+#plot(rvine_matrix(struct_mat),1:4)
 family_test <- list(list("frank", "clayton","gaussian","frank"),
                     list("frank","gaussian","joe"),
                     list("gaussian", "gumbel"),
@@ -16,8 +17,8 @@ params_test <- list(c(ktau_to_par(family=family_test[[1]][[1]], tau=-0.2)),
                     c(ktau_to_par(family=family_test[[1]][[2]], tau=0.3)),
                     c(ktau_to_par(family=family_test[[1]][[3]], tau=-0.1)),
                     c(ktau_to_par(family=family_test[[1]][[4]], tau=0.1)))
-tau_lower = -0.9
-tau_upper = 0.9
+tau_lower = -0.92
+tau_upper = 0.92
 param_cond_funcs_test <- list(list(u_to_param_linear(c(1), tau_lower=tau_lower, tau_upper=tau_upper),
                                    u_to_param_linear(c(1), tau_lower=tau_lower, tau_upper=tau_upper),
                                    u_to_param_linear(c(1), tau_lower=tau_lower, tau_upper=tau_upper)),
@@ -34,6 +35,89 @@ u_test <- simulate_non_simp_parallel(n_samples = 50000,
 #fit.struct_mat<-vinecop(u_test,family_set="onepar",structure=struct_mat)
 #print.data.frame(summary(fit.struct_mat),digit=2)
 pairs_copula_data(u_test)
+# plot_contours_1d(param_cond_func_1d=u_to_param_linear(c(1)), family_vals=c("frank", "gaussian", "joe"))
+# plot_contours_2d(param_cond_func_2d=u_to_param_linear(c(0.7,0.3), tau_lower=tau_lower, tau_upper=tau_upper),
+#                 family_name="gaussian")
+# plot_contours_2d(param_cond_func_2d=u_to_param_linear(c(0.4,0.6), tau_lower=tau_lower, tau_upper=tau_upper),
+#                  family_name="gumbel")
+
+# TEST as of 16.05.2025
+struct_mat <- matrix(c(2,3,2,1,1,
+                       3,2,1,2,0,
+                       1,1,3,0,0,
+                       4,4,0,0,0,
+                       5,0,0,0,0), ncol=5, byrow=TRUE)
+#plot(rvine_matrix(struct_mat),1:4)
+family_test <- list(list("frank", "clayton","gaussian","frank"),
+                    list("frank","gaussian","joe"),
+                    list("gaussian", "gumbel"),
+                    list("gaussian"))
+params_test <- list(c(ktau_to_par(family=family_test[[1]][[1]], tau=-0.2)),
+                    c(ktau_to_par(family=family_test[[1]][[2]], tau=0.3)),
+                    c(ktau_to_par(family=family_test[[1]][[3]], tau=-0.1)),
+                    c(ktau_to_par(family=family_test[[1]][[4]], tau=0.1)))
+tau_lower = 0.001
+tau_upper = 0.92
+param_cond_funcs_test <- list(list(u_to_param_non_lin(c(1,1),
+                                                      tau_lower=tau_lower, tau_upper=tau_upper),
+                                   u_to_param_non_lin(c(1,0.7),
+                                                      tau_lower=tau_lower, tau_upper=tau_upper),
+                                   u_to_param_non_lin(c(1,2),
+                                                      tau_lower=tau_lower, tau_upper=tau_upper)),
+                              list(u_to_param_non_lin(c(0.7,0.3, 0.9,-0.4,0.8),
+                                                      tau_lower=tau_lower, tau_upper=tau_upper),
+                                   u_to_param_non_lin(c(0.4,0.6,1,0.7,2),
+                                                      tau_lower=tau_lower, tau_upper=tau_upper)),
+                              list(u_to_param_non_lin(c(0.2,0.5,0.3,1,2,1,0.4,0.7,0.8),
+                                                      tau_lower=tau_lower, tau_upper=tau_upper)))
+u_test <- simulate_non_simp_parallel(n_samples = 5000,
+                                     struct = struct_mat,
+                                     families=family_test,
+                                     params = params_test,
+                                     param_cond_funcs = param_cond_funcs_test,
+                                     rotations = list(list(0,0,0,0),list(0,0,0), list(0,0), list(0)))
+pairs_copula_data(u_test)
+# END TEST 16.05.2025
+
+# TEST 2 as of 16.05.2025
+struct_mat <- matrix(c(2,3,2,1,1,
+                       3,2,1,2,0,
+                       1,1,3,0,0,
+                       4,4,0,0,0,
+                       5,0,0,0,0), ncol=5, byrow=TRUE)
+#plot(rvine_matrix(struct_mat),1:4)
+family_test <- list(list("frank", "clayton","gaussian","frank"),
+                    list("frank","gaussian","joe"),
+                    list("gaussian", "gumbel"),
+                    list("gaussian"))
+params_test <- list(c(ktau_to_par(family=family_test[[1]][[1]], tau=-0.2)),
+                    c(ktau_to_par(family=family_test[[1]][[2]], tau=0.3)),
+                    c(ktau_to_par(family=family_test[[1]][[3]], tau=-0.1)),
+                    c(ktau_to_par(family=family_test[[1]][[4]], tau=0.1)))
+tau_lower = -0.92
+tau_upper = 0.92
+param_cond_funcs_test <- list(list(u_to_param_non_lin_cub(c(1,1,0.5),
+                                                      tau_lower=tau_lower, tau_upper=tau_upper),
+                                   u_to_param_non_lin_cub(c(1,0.7,0.3),
+                                                      tau_lower=tau_lower, tau_upper=tau_upper),
+                                   u_to_param_non_lin_cub(c(1,2,0.1),
+                                                      tau_lower=tau_lower, tau_upper=tau_upper)),
+                              list(u_to_param_non_lin_cub(c(0.7,0.3, 0.9,-0.4,0.8,0.1,0.2,0.3,0.4),
+                                                      tau_lower=tau_lower, tau_upper=tau_upper),
+                                   u_to_param_non_lin_cub(c(0.4,0.6,1,0.7,2,0.01,0.02,0.04,0.03),
+                                                      tau_lower=tau_lower, tau_upper=tau_upper)),
+                              list(u_to_param_non_lin_cub(c(0.2,0.5,0.3,
+                                                            1,2,1,0.4,0.7,0.8,
+                                                            0.01,0.02,0.03,0.04,0.05,0.06,0.07,0.08,0.09,0.1),
+                                                      tau_lower=tau_lower, tau_upper=tau_upper)))
+u_test <- simulate_non_simp_parallel(n_samples = 5000,
+                                     struct = struct_mat,
+                                     families=family_test,
+                                     params = params_test,
+                                     param_cond_funcs = param_cond_funcs_test,
+                                     rotations = list(list(0,0,0,0),list(0,0,0), list(0,0), list(0)))
+pairs_copula_data(u_test)
+# END TEST 2 of 16.05.2025
 
 # Simulate different data
 struct_mat_1 <- matrix(c(3,3,3,3,
