@@ -21,7 +21,4 @@ Imports:
     keras,
     tensorflow,
     rvinecopulib,
-    vinereg,
-    parallel,
-    MASS,
-    pbapply
+    vinereg
