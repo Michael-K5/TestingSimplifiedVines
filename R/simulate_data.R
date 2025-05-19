@@ -145,11 +145,11 @@ pairs_copula_data(u_test_1)
 struct_mat_2 <- matrix(c(1,1,1,
                          2,2,0,
                          3,0,0), ncol=3, byrow=TRUE)
-u_test_2 <- simulate_non_simp_parallel(n_samples=4000,
+u_test_2 <- simulate_non_simplified(n_samples=1000,
                                     struct = struct_mat_2,
                                     families= list(list("frank", "frank"), list("frank")),
                                     params=list(c(1.3), c(2)),
-                                    param_cond_funcs = list(list(u_to_param)), #u_to_param
+                                    param_cond_funcs = list(list(u_to_param_linear(c(1), tau_lower=0.001, tau_upper=0.7))), #u_to_param
                                     rotations=list(list(0,0), list(0)))
 pairs_copula_data(u_test_2)
 # see how a fit of a simplified copula looks like
