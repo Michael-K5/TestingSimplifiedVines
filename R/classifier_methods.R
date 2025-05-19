@@ -88,16 +88,23 @@ build_model <- function(
     input_dim=5,
     hidden_units=c(20,10),
     initial_lr = 0.01,
+    use_tanh=FALSE,
     leaky_relu_alpha=0.1){
-
+  model <- -1 # reset the model variable.
   # definition of the model
-  model <- keras_model_sequential() %>%
-    layer_dense(units = hidden_units[1], input_shape = input_dim) %>%
-    layer_activation_leaky_relu(alpha = leaky_relu_alpha) %>%
-    layer_dense(units = hidden_units[2]) %>%
-    layer_activation_leaky_relu(alpha = leaky_relu_alpha) %>%
-    layer_dense(units = 1, activation = 'sigmoid') # sigmoid activation, for binary classification
-
+  if(use_tanh){
+    model <- keras_model_sequential() %>%
+      layer_dense(units = hidden_units[1], input_shape = input_dim, activation='tanh') %>%
+      layer_dense(units = hidden_units[2], activation='tanh') %>%
+      layer_dense(units = 1, activation = 'sigmoid') # sigmoid activation, for binary classification
+  } else {
+    model <- keras_model_sequential() %>%
+      layer_dense(units = hidden_units[1], input_shape = input_dim) %>%
+      layer_activation_leaky_relu(alpha = leaky_relu_alpha) %>%
+      layer_dense(units = hidden_units[2]) %>%
+      layer_activation_leaky_relu(alpha = leaky_relu_alpha) %>%
+      layer_dense(units = 1, activation = 'sigmoid') # sigmoid activation, for binary classification
+  }
   # compile the model, define optimizer, loss and metrics
   model %>% compile(
     optimizer = keras$optimizers$Adam(learning_rate=initial_lr),
