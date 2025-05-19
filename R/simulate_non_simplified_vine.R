@@ -215,7 +215,7 @@ u_to_param_non_lin <- function(a, tau_lower=-0.92, tau_upper=0.92){
 #' (should be between -1 and 1 and greater than tau_lower)
 #' @returns A function of u and family, which calculates the parameter of
 #' a copula given the conditioned values.
-u_to_param_non_lin_cub <- function(a, tau_lower=-0.92, tau_upper=0.92){
+u_to_param_non_lin_cubic <- function(a, tau_lower=-0.92, tau_upper=0.92){
   return(function(u, family="gaussian"){
     tryCatch({
       # define parameters for the scaled tanh, so that the result will be between
