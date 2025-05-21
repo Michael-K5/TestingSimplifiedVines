@@ -10,7 +10,9 @@ u_to_param(u, family = "gaussian")
 \arguments{
 \item{u:}{the samples u value (between 0 and 1)}
 
-\item{family:}{the family of the third copula in the sample}
+\item{family:}{the family of the third copula in the sample
+#' @returns A function of u and family, which calculates the parameter of
+a copula given the conditioned values.}
 }
 \description{
 maps a u value to the specific parameter for the third copula, by
