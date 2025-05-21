@@ -1,7 +1,6 @@
 library(rvinecopulib) # copulas
 library(keras) # Machine Learning and Neural Networks
 library(tensorflow) # Neural Networks
-library(vinereg) #D-vine quantile regression
 
 #' Performs a train test split
 #' Gives all datapoints in orig_data a label of 1, all datapoints in simplified data a label of 0
@@ -26,11 +25,11 @@ train_test_split <- function(orig_data, simplified_data, train_perc=0.8, stratif
     y_train_orig <- as.matrix(labels[train_orig_idx,])
     y_test_orig <- as.matrix(labels[-train_orig_idx,])
     # extract the training and testing samples from the simplified data
-    num_train_simp <- floor(train_perc*nrow(simplified_samples))
-    train_simp_idx <- sample(nrow(simplified_samples), num_train_simp)
-    x_train_simp <- simplified_samples[train_simp_idx,]
+    num_train_simp <- floor(train_perc*nrow(simplified_data))
+    train_simp_idx <- sample(nrow(simplified_data), num_train_simp)
+    x_train_simp <- simplified_data[train_simp_idx,]
     y_train_simp <- as.matrix(simplified_labels[train_simp_idx,])
-    x_test_simp <- simplified_samples[-train_simp_idx,]
+    x_test_simp <- simplified_data[-train_simp_idx,]
     y_test_simp <- as.matrix(simplified_labels[-train_simp_idx,])
     # combine the data into one dataset and shuffle
     x_train <- rbind(x_train_orig, x_train_simp)
@@ -49,7 +48,7 @@ train_test_split <- function(orig_data, simplified_data, train_perc=0.8, stratif
                 y_test))
   } else {
     # combine data
-    classifier_data <- rbind(orig_data, simplified_samples)
+    classifier_data <- rbind(orig_data, simplified_data)
     classifier_labels <- rbind(labels, simplified_labels)
     # perform train test split
     num_train <- floor(train_perc * nrow(classifier_data))
@@ -67,6 +66,9 @@ train_test_split <- function(orig_data, simplified_data, train_perc=0.8, stratif
 
 #' learning rate scheduler: halves the learning rate every 30 epochs
 #' argument to a keras function
+#' @param epoch: current epoch
+#' @param lr: current learning rate
+#' @returns lr: the updated learning rate
 lr_schedule_fun <- function(epoch, lr) {
   if((epoch + 1) %% 30 == 0){
     return(lr/2)
@@ -127,6 +129,7 @@ build_model <- function(
 #' @param verbose: 0 or 1, defaults to 1.
 #' If 1, an output is printed after every epoch of the training process.
 #' If 0, no output is printed.
+#' @returns model: the trained model
 train_model <- function(
     model,
     x_train,
@@ -183,6 +186,9 @@ compute_gvals <- function(
 #' @param top_quantile_levels: Defaults to c(0.05,0.1). Vector of upper quantiles,
 #' for which it is checked, whether the conditioned quantile estimates are <0.
 #' Tests whether the simplified model is better
+#' @returns: A List of 2 vectors, the first containing the number of samples, for which
+#' q(bottom_quantile_levels) > 0 holds, the second containing the number of samples, for
+#' which q(top_quantile_levels) < 0 holds.
 perform_quant_reg <- function(
     g_vals,
     orig_data,
@@ -191,7 +197,7 @@ perform_quant_reg <- function(
     top_quantile_levels = c(0.9,0.95)){
   orig_data <- data.frame(orig_data)
   qreg_data <- cbind(g_vals, orig_data)
-  q_reg <- vinereg(g_vals ~ . ,family_set=family_set_name, data=qreg_data)
+  q_reg <- vinereg::vinereg(g_vals ~ . ,family_set=family_set_name, data=qreg_data)
   bottom_quantiles <- predict(q_reg, newdata=orig_data, alpha=bottom_quantile_levels)
   top_quantiles <- predict(q_reg, newdata=orig_data, alpha=top_quantile_levels)
   alternative_better <- rep(0,length(bottom_quantile_levels))
@@ -214,8 +220,9 @@ perform_quant_reg <- function(
 
 }
 
+
 # Example Usage:
-# split_output <- train_test_split(orig_data, simplified_samples)
+# split_output <- train_test_split(orig_data, simplified_data)
 # x_train <- split_output[[1]]
 # x_test <- split_output[[2]]
 # y_train <- split_output[[3]]
