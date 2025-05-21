@@ -1,8 +1,6 @@
 # This script contains functions to simulate from a Non-Simplified Vine Copula
 library(rvinecopulib)
-library(MASS) # for custom pair copula plot
-library(parallel) # library for parallel processing (allowing faster sampling)
-library(pbapply) # library to display a progress bar with parallel sampling
+
 #' Computes the fisher Z transform (artanh)
 #' @param tau: the value of Kendall's tau to transform to a real number.
 #' Can also be a vector of taus.
@@ -37,7 +35,7 @@ scaled_tanh <- function(T_val, scaling_factor=1.0, shift=0.0){
 #' finding a value on the fisher-z-transform-scale and mapping that back to a parameter
 #' @param u: the samples u value (between 0 and 1)
 #' @param family: the family of the third copula in the sample
-#' #' @returns A function of u and family, which calculates the parameter of
+#' @returns A function of u and family, which calculates the parameter of
 #' a copula given the conditioned values.
 u_to_param <- function(u, family="gaussian"){
   tryCatch({
@@ -265,6 +263,9 @@ u_to_param_non_lin_cubic <- function(a, tau_lower=-0.92, tau_upper=0.92){
 #' permutes indices of a rvine structure matrix so that on the antidiagonal
 #' the values 1 to d (dimension of the matrix) are ordered from top right to bottom left
 #' @param mat: The rvine structure matrix
+#' @returns list with matrix as first entry, another list as second entry and a vector as third entry
+#' First entry of result is the new structure matrix, second works as a dictionary, mapping the values
+#' the last contains the values on the antidiagonal of the original matrix.
 permute_indices <- function(mat){
   antidiag_values <- rev(as_rvine_structure(mat)$order)
   n <- nrow(mat)
@@ -286,6 +287,7 @@ permute_indices <- function(mat){
 #' The samples from the reordered rvine structure (with antidiagonal values ordered
 #' from bottom left to top right)
 #' @param original_order: The elements on the antidiagonal from bottom left to top right in the original structure
+#' @returns result: the simulations, with the correct order.
 permute_back <- function(simulations, original_order){
   result = simulations[,1:ncol(simulations)]
   for (i in 1:ncol(simulations)){
@@ -294,7 +296,9 @@ permute_back <- function(simulations, original_order){
   return(result)
 }
 
-# function to compute the matrix \tilde{M}
+#' function to compute the matrix tilde(M)
+#' @param mat: The input matrix
+#' @returns the matrix, with entries tilde(m)_k,i = max_j=1,...,k (m_j,i)
 get_max_matrix <- function(mat){
   num_cols <- ncol(mat)
   num_rows <- nrow(mat)
@@ -316,12 +320,13 @@ get_max_matrix <- function(mat){
 #' to be able to parallelize the procedure more easily for better performance
 #' @param new_struct rvine structure, where the antidiagonal is ordered
 #' increasingly from top right to bottom left.
-#' @param M_mat the matrix \tilde{M}, with \tilde{M_{k,i}} = max_{j=1}^{k}{new_struct_{j,i}}
+#' @param M_mat the matrix tilde(M), with tilde(m)_k,i = max_{j=1}^{k}{new_struct_{j,i}}
 #' @param families copula families, formatted as a list of lists
 #' @param params parameters for the first tree, formatted as a list (of vectors)
 #' @param param_cond_funcs list of list of functions that maps the u values, which the respective
 #' copula is conditioned on, and a copula family-name to a parameter for that copula
 #' @param rotations rotations of the copulas, formatted as a list of lists.
+#' @returns u_row: a d-dimensional vector sampled from the non-simplified vine copula
 simulate_single_sample <- function(new_struct,
                                    M_mat,
                                    families,
@@ -400,6 +405,7 @@ simulate_single_sample <- function(new_struct,
 #' @param param_cond_funcs list of list of functions that maps the u values, which the respective
 #' copula is conditioned on, and a copula family-name to a parameter for that copula
 #' @param rotations rotations of the copulas, formatted as a list of lists.
+#' @returns result: A nxd matrix, where each row contains one sample.
 simulate_non_simplified <- function(n_samples = 500,
                                     struct = matrix(c(1,1,1,
                                                       2,2,0,
@@ -447,6 +453,7 @@ simulate_non_simplified <- function(n_samples = 500,
 #' @param param_cond_funcs list of list of functions that maps the u values, which the respective
 #' copula is conditioned on, and a copula family-name to a parameter for that copula
 #' @param rotations rotations of the copulas, formatted as a list of lists.
+#' @returns result: A nxd matrix, where each row contains one sample.
 simulate_non_simp_parallel <- function(n_samples = 500,
                                        struct = matrix(c(1,1,1,
                                                          2,2,0,
@@ -469,9 +476,9 @@ simulate_non_simp_parallel <- function(n_samples = 500,
   u <- matrix(rep(0,d*n_samples),ncol=d)
 
   # parallel computing
-  cl <- makeCluster(detectCores() - 1)
+  cl <- parallel::makeCluster(parallel::detectCores() - 1)
   # export the required functions for parallel processing
-  clusterExport(cl,
+  parallel::clusterExport(cl,
                 varlist = c("simulate_single_sample",
                             "u_to_param",
                             "bicop_dist",
@@ -481,15 +488,13 @@ simulate_non_simp_parallel <- function(n_samples = 500,
                             "inverse_fisher_transform",
                             "scaled_tanh",
                             "struct",
-                            "tau_lower",
-                            "tau_upper",
                             "families",
                             "params",
                             "param_cond_funcs",
                             "rotations"),
                 envir=environment())
   # pblapply to display a progress bar
-  output_list <- pblapply(1:n_samples, function(i) {
+  output_list <- pbapply::pblapply(1:n_samples, function(i) {
     simulate_single_sample(new_struct,
                            M_mat,
                            families,
@@ -498,7 +503,7 @@ simulate_non_simp_parallel <- function(n_samples = 500,
                            rotations)
   }, cl=cl)
   # stop the cluster, to free resources on computer
-  stopCluster(cl)
+  parallel::stopCluster(cl)
 
   u <- do.call(rbind, output_list)
   # permute the indices back to get a sample from the original rvine-structure
