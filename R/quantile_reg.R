@@ -1,6 +1,6 @@
 # Script for performing a quantile regression to test for the simmplifying assumption.
 # Also contains a function for evaluating a non parametric copula estimate
-library(vinereg)
+#library(vinereg)
 library(keras)
 library(rvinecopulib)
 # Parameters to determine, which model and data to load.
@@ -20,20 +20,32 @@ orig_data <- as.matrix(read.csv(csv_filename))
 orig_data <- unname(orig_data) #remove col- and rownames
 
 
-# compute the value of the non-parametric copula obtained from the simplified fit,
-# together with the classifier
-non_param_cop <- function(obs, nu=1){
+#' compute the value of the non-parametric copula obtained from the simplified fit,
+#' together with the classifier
+#' @param model: The classifier trained to distinguish non-simplified data
+#' with labels 1 from simplified data with labels 0
+#' @param fitted_vine: The vine copula fitted to the observed data.
+#' @param obs: the observations, for which the non-parametric copula should be created.
+#' @param nu: The fraction of noise to real samples
+#' @returns The non-parametric copula evaluated at the points obs.
+non_param_cop <- function(model, fitted_vine, obs, nu=1){
   predictions <- model %>% predict(obs)
-  c_np <- nu * predictions/(1-predictions) * dvinecop(obs, fitted_cop)
+  c_np <- nu * predictions/(1-predictions) * dvinecop(obs, fitted_vine)
   return(c_np)
 }
 
 #' monte carlo integral of non_param_cop (using importance sampling)
-compute_integral <- function(n_samples, user_info=FALSE){
+#' @param model: The classifier trained to distinguish non-simplified data
+#' with labels 1 from simplified data with labels 0
+#' @param fitted_vine: The vine copula fitted to the observed data.
+#' @param n_samples: Number of samples to create to compute the integral
+#' @param user_info: Whether to display an information, which steps are currently running.
+#' @returns The monte carlo integral approximation.
+compute_integral <- function(model, fitted_vine, n_samples, user_info=FALSE){
   if (user_info){
     print("Start noise sampling")
   }
-  samples <- rvinecop(n_samples, fitted_cop)
+  samples <- rvinecop(n_samples, fitted_vine)
   if(user_info){
     print("Noise samples created")
     print("Evaluating noise density")
@@ -42,14 +54,14 @@ compute_integral <- function(n_samples, user_info=FALSE){
   if(user_info){
     print("evaluating neural network output")
   }
-  p_non_param <- non_param_cop(samples)
+  p_non_param <- non_param_cop(fitted_vine=fitted_vine, model=model, obs=samples)
   return(mean(p_non_param/p_simp))
 }
-temp <- non_param_cop(orig_data)
-int_val <- compute_integral(100000)
-int_val
-temp_norm <- temp / int_val
-
+# temp <- non_param_cop(orig_data)
+# int_val <- compute_integral(100000)
+# int_val
+# temp_norm <- temp / int_val
+#
 # make predictions on the observed Data (orig_data)
 head(orig_data)
 predictions <- model %>% predict(orig_data)
