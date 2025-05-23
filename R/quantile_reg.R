@@ -1,13 +1,14 @@
 # Script for performing a quantile regression to test for the simmplifying assumption.
 # Also contains a function for evaluating a non parametric copula estimate
 #library(vinereg)
+source("R/classifier_methods.R")
 library(keras)
 library(rvinecopulib)
 # Parameters to determine, which model and data to load.
-last_data_simulation_date <- "2025-05-08"
-last_train_date <- "2025-05-08"
+last_data_simulation_date <- "2025-05-23"
+last_train_date <- "2025-05-23"
 data_dim <- "5"
-nu <- 1 # T_n/T_c, the ratio of noise to observed samples during training
+nu <- 5 # T_n/T_c, the ratio of noise to observed samples during training
 # load the Neural Network Classifier
 model_path <- paste0("models/NN_", data_dim, "d_", last_train_date, ".keras")
 model <- load_model_hdf5(model_path)
@@ -20,46 +21,24 @@ orig_data <- as.matrix(read.csv(csv_filename))
 orig_data <- unname(orig_data) #remove col- and rownames
 
 
-#' compute the value of the non-parametric copula obtained from the simplified fit,
-#' together with the classifier
-#' @param model: The classifier trained to distinguish non-simplified data
-#' with labels 1 from simplified data with labels 0
-#' @param fitted_vine: The vine copula fitted to the observed data.
-#' @param obs: the observations, for which the non-parametric copula should be created.
-#' @param nu: The fraction of noise to real samples
-#' @returns The non-parametric copula evaluated at the points obs.
-non_param_cop <- function(model, fitted_vine, obs, nu=1){
-  predictions <- model %>% predict(obs)
-  c_np <- nu * predictions/(1-predictions) * dvinecop(obs, fitted_vine)
-  return(c_np)
-}
 
-#' monte carlo integral of non_param_cop (using importance sampling)
-#' @param model: The classifier trained to distinguish non-simplified data
-#' with labels 1 from simplified data with labels 0
-#' @param fitted_vine: The vine copula fitted to the observed data.
-#' @param n_samples: Number of samples to create to compute the integral
-#' @param user_info: Whether to display an information, which steps are currently running.
-#' @returns The monte carlo integral approximation.
-compute_integral <- function(model, fitted_vine, n_samples, user_info=FALSE){
-  if (user_info){
-    print("Start noise sampling")
-  }
-  samples <- rvinecop(n_samples, fitted_vine)
-  if(user_info){
-    print("Noise samples created")
-    print("Evaluating noise density")
-  }
-  p_simp <- dvinecop(samples, fitted_cop)
-  if(user_info){
-    print("evaluating neural network output")
-  }
-  p_non_param <- non_param_cop(fitted_vine=fitted_vine, model=model, obs=samples)
-  return(mean(p_non_param/p_simp))
-}
+cor_facs <- correction_factors(model, obs=orig_data, nu=nu)
+plot(cor_facs)
+remove_top <- floor(0.01 * length(cor_facs))
+cor_facs_no_outliers <- (sort(cor_facs)[1:(length(cor_facs) - remove_top)])
+plot(cor_facs_no_outliers)
+hist(cor_facs_no_outliers)
+sum(cor_facs_no_outliers < 1)
+sum(cor_facs_no_outliers > 2)
+
 # temp <- non_param_cop(orig_data)
-# int_val <- compute_integral(100000)
-# int_val
+int_val <- compute_integral(model=model,
+                            fitted_vine = fitted_cop,
+                            nu=nu,
+                            data_dim_if_unif = as.integer(data_dim),
+                            n_samples=10000,
+                            user_info=TRUE)
+int_val
 # temp_norm <- temp / int_val
 #
 # make predictions on the observed Data (orig_data)
@@ -78,23 +57,27 @@ g_vals <- log(nu * predictions / (1-predictions)) # G(u, \eta) from the thesis
 # quantile regression:
 # Test if the 10 percent quantile of G is >0, then the alternative model is considered better
 # If the 90 percent quantile of G is < 0, then the simplified model is better (unlikely)
-obs_data <- data.frame(orig_data)
-qreg_data <- cbind(g_vals, obs_data)
-q_reg <- vinereg(g_vals ~ . ,family_set="parametric", data=qreg_data)
-quantiles <- predict(q_reg, newdata=obs_data, alpha=c(0.1,0.9))
-alternative_better <- 0
-simp_better <- 0
-for( i in 1:nrow(quantiles)){
-  if(quantiles[i,1] > 0){
-    alternative_better <- alternative_better + 1
-  } else if (quantiles[i,2] < 0){
-    simp_better <- simp_better +1
-  }
-}
-alternative_better
-simp_better
-nrow(quantiles) - (alternative_better + simp_better)
-alternative_better / nrow(quantiles)
+output_qreg <- perform_quant_reg(
+    g_vals,
+    orig_data,
+    family_set_name = "parametric",
+    bottom_quantile_levels = c(0.05,0.1),
+    top_quantile_levels = c(0.9,0.95))
+
+alternative_better <- output_qreg[[1]]
+simp_better <- output_qreg[[2]]
+print(paste0("Alternative Model is better in ",
+             alternative_better,
+             " cases, which is a fraction of ",
+             alternative_better / nrow(orig_data)))
+print(paste0("Simplified Model is better in ",
+             simp_better,
+             " cases, which is a fraction of ",
+             simp_better / nrow(orig_data)))
+print(paste0("Test inconclusive in ",
+             nrow(orig_data) - (alternative_better + simp_better),
+             " cases, which is a fraction of ",
+             (nrow(orig_data) - (alternative_better + simp_better))/nrow(orig_data)))
 # head(quantiles)
 # temp <- 0
 # for (i in 1:nrow(quantiles)){
@@ -105,7 +88,7 @@ alternative_better / nrow(quantiles)
 # temp
 
 
-# save r_vals
+# save g_vals
 # Get the current date in YYYY-MM-DD format
 current_date <- Sys.Date()
 # Construct the file name with the date
