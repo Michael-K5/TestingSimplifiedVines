@@ -225,7 +225,8 @@ run_simulations <- function(num_samples,
           model <- 0
           # define new model
           model <- build_model(input_dim=ncol(x_train), use_tanh=FALSE)
-          model <- train_model(model, x_train, y_train, num_epochs=200)
+          train_model_output <- train_model(model, x_train, y_train, num_epochs=200)
+          model <- train_model_output[[1]]
           test_set_eval <- model %>% evaluate(x_test, y_test)
           g_vals <- compute_gvals(model, orig_data, nu=nu_var)
           output <- perform_quant_reg(g_vals,
