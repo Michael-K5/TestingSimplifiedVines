@@ -3,9 +3,12 @@
 library(rvinecopulib)
 library(keras)
 library(tensorflow)
+source("R/classifier_methods.R")
 # Parameters to determine, which data to load.
-last_data_simulation_date <- "2025-05-08"
-data_dim <- "5"
+last_data_simulation_date <- "2025-05-23"
+data_dim <- 5
+# fraction of noise to true samples (to determine how many noise samples to create)
+nu <- 5
 # load data
 csv_filename <- paste0("data/non_simplified_sim_",data_dim,"d_",last_data_simulation_date,".csv")
 orig_data <- as.matrix(read.csv(csv_filename))
@@ -21,116 +24,43 @@ current_date <- Sys.Date()
 copula_path <- paste0("models/copula_",data_dim,"d_", current_date,".rds")
 saveRDS(fitted_vine, file = copula_path)
 # simulate from the simplified vine, to train a classifier later.
-num_samples <- num_rows # number of samples to create from the fitted vine
+num_samples <- num_rows * nu# number of samples to create from the fitted vine
 simplified_samples <- rvinecop(num_samples, fitted_vine)
 #pairs_copula_data(simplified_samples)
 
-# If required: have same ratio in train and test sets
-train_test_split <- function(orig_data, simplified_data, train_perc=0.8, stratified=FALSE){
-  # cast labels as matrix (to ensure compatibility with tensorflow)
-  labels <- as.matrix(rep(1L, nrow(orig_data)))
-  simplified_labels <- as.matrix(rep(0L, nrow(simplified_data)))
-  if(stratified){
-    # extract the training and testing samples from the original data
-    num_train_orig <- floor(train_perc * nrow(orig_data))
-    train_orig_idx <- sample(nrow(orig_data),num_train_orig)
-    x_train_orig <- orig_data[train_orig_idx,]
-    x_test_orig <- orig_data[-train_orig_idx,]
-    y_train_orig <- as.matrix(labels[train_orig_idx,])
-    y_test_orig <- as.matrix(labels[-train_orig_idx,])
-    # extract the training and testing samples from the simplified data
-    num_train_simp <- floor(train_perc*nrow(simplified_samples))
-    train_simp_idx <- sample(nrow(simplified_samples), num_train_simp)
-    x_train_simp <- simplified_samples[train_simp_idx,]
-    y_train_simp <- as.matrix(simplified_labels[train_simp_idx,])
-    x_test_simp <- simplified_samples[-train_simp_idx,]
-    y_test_simp <- as.matrix(simplified_labels[-train_simp_idx,])
-    # combine the data into one dataset and shuffle
-    x_train <- rbind(x_train_orig, x_train_simp)
-    y_train <- rbind(y_train_orig, y_train_simp)
-    shuffle_idx_train <- sample(nrow(x_train), nrow(x_train))
-    x_train <- x_train[shuffle_idx_train,]
-    y_train <- y_train[shuffle_idx_train,]
-    x_test <- rbind(x_test_orig, x_test_simp)
-    y_test <- rbind(y_test_orig, y_test_simp)
-    shuffle_idx_test <- sample(nrow(x_test), nrow(x_test))
-    x_test <- x_test[shuffle_idx_test,]
-    y_test <- y_test[shuffle_idx_test,]
-    return(list(x_train,
-                x_test,
-                y_train,
-                y_test))
-  } else {
-    # combine data
-    classifier_data <- rbind(orig_data, simplified_samples)
-    classifier_labels <- rbind(labels, simplified_labels)
-    # perform train test split
-    num_train <- floor(train_perc * nrow(classifier_data))
-    train_idx <- sample(nrow(classifier_data),num_train)
-    x_train <- classifier_data[train_idx,]
-    y_train <- as.matrix(classifier_labels[train_idx,])
-    x_test <- classifier_data[-train_idx,]
-    y_test <- as.matrix(classifier_labels[-train_idx,])
-    return(list(x_train,
-                x_test,
-                y_train,
-                y_test))
-  }
-}
-
-split_output <- train_test_split(orig_data, simplified_samples)
+split_output <- train_test_split(orig_data, simplified_samples, stratified=TRUE)
 x_train <- split_output[[1]]
 x_test <- split_output[[2]]
 y_train <- split_output[[3]]
 y_test <- split_output[[4]]
 
-# definition of the model
-model <- keras_model_sequential() %>%
-  #layer_dense(units = 20, activation = 'relu', input_shape = ncol(x_train)) %>%
-  layer_dense(units = 32, input_shape = ncol(x_train)) %>%
-  layer_activation_leaky_relu(alpha = 0.1) %>%
-  #layer_dropout(rate = 0.3) %>% # Dropout layer (for regularization, if necessary)
-  #layer_dense(units = 10, activation = 'relu') %>%
-  layer_dense(units = 16) %>%
-  layer_activation_leaky_relu(alpha = 0.1) %>%
-  layer_dense(units = 1, activation = 'sigmoid') # sigmoid activation, for binary classification
-
-# learning rate scheduler: halves the learning rate every 30 epochs
-lr_schedule <- function(epoch, lr) {
-  if((epoch + 1) %% 10 == 0){
-    return(lr/2)
-  } else {
-    return(lr)
-  }
-}
-
-# create the keras object required for learning rate scheduling
-lr_scheduler <- callback_learning_rate_scheduler(schedule = lr_schedule)
-
-# compile the model, define optimizer, loss and metrics
-model %>% compile(
-  optimizer = keras$optimizers$Adam(learning_rate=1e-2),
-  loss = keras$losses$BinaryCrossentropy(),
-  metrics = keras$metrics$BinaryAccuracy()
+model <- build_model(
+    input_dim=5,
+    hidden_units=c(20,10), # 2 hidden layers with 20 and 10 units respectively.
+    initial_lr = 0.01,
+    use_tanh=FALSE, # Use leaky_relu, not tanh
+    leaky_relu_alpha=0.1)
+train_model_output <- train_model(
+  model=model,
+  x_train=x_train,
+  y_train=y_train,
+  lr_schedule=lr_schedule_fun,
+  num_epochs=200
 )
-# show model summary
-model %>% summary
+model <- train_model_output[[1]]
+history <- train_model_output[[2]]
 
-# train the model
-history <- model %>% fit(
-  x_train, y_train,
-  epochs = 50,
-  batch_size = 128,
-  validation_split=0.2, # use 20 percent of training data as validation data
-  verbose = 1, # 0 for slightly faster training (no output), 1 to observe progress while training
-  callbacks=list(lr_scheduler)
-)
-plot(history)
-
+plot(history) # training and validation loss and accuracy, learning rate
+# remove learning rate from plot
+plot(history, metrics = c("loss", "binary_accuracy"))
 # evaluate the model on the test set
 loss_and_metrics <- model %>% evaluate(x_test, y_test)
 print(loss_and_metrics)
-
+print(paste0(
+  "Base Accuracy for Prior: ",
+  nrow(simplified_samples) / (nrow(simplified_samples) + nrow(orig_data))
+  )
+)
 # save the model for reusing it later
 # Get the current date in YYYY-MM-DD format
 current_date <- Sys.Date()
