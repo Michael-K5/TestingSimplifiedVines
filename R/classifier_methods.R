@@ -272,7 +272,7 @@ compute_gvals <- function(
 perform_quant_reg <- function(
     g_vals,
     orig_data,
-    family_set_name = "onepar",
+    family_set_name = "parametric",
     bottom_quantile_levels = c(0.05,0.1),
     top_quantile_levels = c(0.9,0.95)){
   orig_data <- data.frame(orig_data)
