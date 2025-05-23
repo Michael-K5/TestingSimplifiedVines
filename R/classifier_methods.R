@@ -129,7 +129,8 @@ build_model <- function(
 #' @param verbose: 0 or 1, defaults to 1.
 #' If 1, an output is printed after every epoch of the training process.
 #' If 0, no output is printed.
-#' @returns model: the trained model
+#' @returns list(model,history): a list of the trained model in the first position
+#' and the training history (loss, accuracy and learing_rate per epoch)
 train_model <- function(
     model,
     x_train,
@@ -152,7 +153,86 @@ train_model <- function(
     verbose = 1, # 0 for slightly faster training (no output), 1 to observe progress while training
     callbacks=list(lr_scheduler)
   )
-  return(model)
+  return(list(model, history))
+}
+
+# METHODS FOR QUANTILE REGRESSION
+
+#' Calculate the correction factors, i.e. the factors lambda, with which the
+#' simplified copula needs to be multiplied to get the non-parametric copula.
+#' @param model: The classifier trained to distinguish non-simplified data
+#' with labels 1 from simplified data with labels 0
+#' @param obs: the observations, for which the factors should be created.
+#' @param nu: The fraction of noise to real samples
+#' @returns The correction factors
+correction_factors <- function(model, obs, nu=1){
+  predictions <- model %>% predict(obs)
+  cor_factors <- nu * predictions/(1-predictions)
+  return(cor_factors)
+}
+
+#' compute the value of the non-parametric copula obtained from the simplified fit,
+#' together with the classifier
+#' @param model: The classifier trained to distinguish non-simplified data
+#' with labels 1 from simplified data with labels 0
+#' @param fitted_vine: The vine copula fitted to the observed data.
+#' @param obs: the observations, for which the non-parametric copula should be created.
+#' @param nu: The fraction of noise to real samples
+#' @returns The non-parametric copula evaluated at the points obs.
+non_param_cop <- function(model, fitted_vine, obs, nu=1){
+  cor_facs <- correction_factors(model=model, obs=obs, nu=nu)
+  c_np <- cor_facs * dvinecop(obs, fitted_vine)
+  return(c_np)
+}
+
+#' Monte Carlo integral of non_param_cop (using importance sampling)
+#' @param model: The classifier trained to distinguish non-simplified data
+#' with labels 1 from simplified data with labels 0
+#' @param fitted_vine: The vine copula fitted to the observed data.
+#' @param n_samples: Number of samples to create to compute the integral
+#' @param data_dim_if_unif: Data dimensionality. If this is given (and !=-1),
+#' then the samples are drawn from a uniform distribution on [0,1]^d.
+#' Otherwise the samples are drawn from the simplified vine
+#' @param user_info: Whether to display an information, which steps are currently running.
+#' @returns The Monte Carlo integral approximation.
+compute_integral <- function(model,
+                             fitted_vine,
+                             n_samples,
+                             nu,
+                             data_dim_if_unif=-1,
+                             user_info=FALSE){
+  samples <- 0
+  if (data_dim_if_unif != -1){
+    if (user_info){
+      print("Start noise sampling (uniform)")
+    }
+    # simulate random uniform samples on [0,1]^d
+    samples <- matrix(runif(n_samples * data_dim_if_unif),
+                      ncol=data_dim_if_unif)
+  } else {
+    if (user_info){
+      print("Start noise sampling (simplified vine)")
+    }
+    # simulate samples from the simplified vine copula
+    samples <- rvinecop(n_samples, fitted_vine)
+  }
+  if(user_info){
+    print("Noise samples created")
+  }
+  p_simp <- 1
+  if(data_dim_if_unif==-1){
+    # If samples are drawn from the simplified vine copula,
+    # the density needs to be evaluated
+    if(user_info){
+      print("Evaluating noise density (simplified vine)")
+    }
+    p_simp <- dvinecop(samples, fitted_cop)
+  }
+  if(user_info){
+    print("Evaluating neural network output")
+  }
+  p_non_param <- non_param_cop(fitted_vine=fitted_vine, model=model, obs=samples, nu=nu)
+  return(mean(p_non_param/p_simp))
 }
 
 #' Compute the g values as defined in the thesis
@@ -166,13 +246,13 @@ compute_gvals <- function(
     orig_data,
     nu=1){
   predictions <- model %>% predict(orig_data)
-  length(predictions[predictions> 0.5]) / length(predictions)
   # here a classifier p(u) was trained on the data. to get the values g(u),
   # as defined in the thesis, g(u) = log(\nu \cdot p(u)/(1-p(u))) needs to be computed,
   # where nu = T_n/T_c, the fraction of number of noise samples to observed samples
   g_vals <- log(nu * predictions / (1-predictions)) # G(u, \eta) from the thesis
   return(g_vals)
 }
+
 
 #' performs a quantile regression
 #' @param g_vals: Vector. Values g_t from the thesis
