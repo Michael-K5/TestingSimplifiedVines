@@ -57,27 +57,49 @@ g_vals <- log(nu * predictions / (1-predictions)) # G(u, \eta) from the thesis
 # quantile regression:
 # Test if the 10 percent quantile of G is >0, then the alternative model is considered better
 # If the 90 percent quantile of G is < 0, then the simplified model is better (unlikely)
+bottom_q_levs <- c(0.05, 0.1)
+top_q_levs <- c(0.9,0.95)
 output_qreg <- perform_quant_reg(
     g_vals,
+    nu=5,
     orig_data,
     family_set_name = "parametric",
-    bottom_quantile_levels = c(0.05,0.1),
-    top_quantile_levels = c(0.9,0.95))
+    bottom_quantile_levels = bottom_q_levs,
+    top_quantile_levels = top_q_levs)
 
 alternative_better <- output_qreg[[1]]
 simp_better <- output_qreg[[2]]
-print(paste0("Alternative Model is better in ",
-             alternative_better,
-             " cases, which is a fraction of ",
-             alternative_better / nrow(orig_data)))
-print(paste0("Simplified Model is better in ",
-             simp_better,
-             " cases, which is a fraction of ",
-             simp_better / nrow(orig_data)))
-print(paste0("Test inconclusive in ",
-             nrow(orig_data) - (alternative_better + simp_better),
-             " cases, which is a fraction of ",
-             (nrow(orig_data) - (alternative_better + simp_better))/nrow(orig_data)))
+for(i in 1:length(bottom_q_levs)){
+  print(paste0("At the alpha = ",
+               bottom_q_levs[i],
+               " level, the alternative model is better in ",
+               alternative_better[i],
+               " cases, which is a fraction of ",
+               alternative_better[i] / nrow(orig_data),
+               "."))
+}
+for(i in 1:length(top_q_levs)){
+  print(paste0("At the alpha = ",
+               1 - top_q_levs[i],
+               " level, the simplified model is better in ",
+               simp_better[i],
+               " cases, which is a fraction of ",
+               simp_better[i] / nrow(orig_data),
+               "."))
+}
+if(length(bottom_q_levs) == length(top_q_levs)){
+  for(i in 1:length(bottom_q_levs)){
+    if(abs(bottom_q_levs[i]- (1 - top_q_levs[length(top_q_levs) - i+ 1])) < 0.0001){
+      print(paste0("At the alpha = ",
+                   bottom_q_levs[i],
+                   " level, the test is inconclusive in ",
+                   nrow(orig_data) - (alternative_better[i] + simp_better[length(top_q_levs) - i+ 1]),
+                   " cases, which is a fraction of ",
+                   (nrow(orig_data) - (alternative_better[i] + simp_better[length(top_q_levs) - i+ 1]))/nrow(orig_data),
+                   "."))
+    }
+  }
+}
 # head(quantiles)
 # temp <- 0
 # for (i in 1:nrow(quantiles)){
