@@ -148,11 +148,13 @@ u_to_param_lin_quad <- function(a, tau_lower=-0.92, tau_upper=0.92){
   })
 }
 
-#' takes a vector a and returns a function of u (vector of elements between 0 and 1)
+#' Takes a vector a and returns a function of u (vector of elements between 0 and 1)
 #' and of a string "family", which corresponds to a copula family.
-#' that function transforms the values u using qnorm (inverse normal dist.function)
-#' and then builds polynomial terms of degree 2, if dim(u) <=3, else a linear function of these
-#' with a as parameters.
+#' that function transforms the values u using qnorm (inverse normal dist.function),
+#' builds polynomial terms of degree 2 of these terms and then transforms them
+#' to the interval (tau_lower, tau_upper) using a scaled tanh.
+#' If dim(u) <=3 includes all terms u[i]*u[j], (powers and mixed terms).
+#' If dim(u) > 3 only includes the individual powers, u[i]^k, k=1,2.
 #' @param a: a vector of weights
 #' @param tau_lower: Lowest tau value
 #' (should be between -1 and 1 and less than tau_upper)
@@ -187,7 +189,11 @@ u_to_param_quadratic <- function(a, tau_lower=-0.92, tau_upper=0.92){
                   arg[1]*arg[2], arg[1]*arg[3], arg[2]*arg[3]) %*% a
         tau <- scaled_tanh(temp, scaling_factor=scaling_factor, shift=shift)
       }else{
-        # just apply linear function here.
+        # do not include mixed terms here.
+        arg <- poly(arg, 2, raw=TRUE) # raw to just evaluate the polynomial terms
+        # only keep the entries and list them in a vector with
+        # c(arg[1],arg[2],..., arg[1]^2, arg[2]^2,...)
+        arg <- c(unname(arg[1:nrow(arg),]))
         tau <- scaled_tanh(a%*%arg, scaling_factor=scaling_Factor, shift=shift)
       }
       param <- ktau_to_par(family=family, tau=tau)
@@ -195,17 +201,19 @@ u_to_param_quadratic <- function(a, tau_lower=-0.92, tau_upper=0.92){
     },
     error = function(e){
       stop(paste0("An error occurred:", e, ". Common causes of an error:
-          The function u_to_param_non_lin only supports families for which ktau_to_par is defined.
+          This function only supports families for which ktau_to_par is defined.
           The vector a does not have sufficiently many entries."))
     })
   })
 }
 
-#' takes a vector a and returns a function of u (vector of elements between 0 and 1)
+#' Takes a vector a and returns a function of u (vector of elements between 0 and 1)
 #' and of a string "family", which corresponds to a copula family.
-#' that function transforms the values u using qnorm (inverse normal dist.function)
-#' and then builds polynomial terms of degree 3, if dim(u) <=3, else a linear function of these
-#' with a as parameters.
+#' that function transforms the values u using qnorm (inverse normal dist.function),
+#' builds polynomial terms of degree 2 of these terms and then transforms them
+#' to the interval (tau_lower, tau_upper) using a scaled tanh.
+#' If dim(u) <=3 includes powers and mixed terms,
+#' If dim(u) > 3 only includes the individual powers, u[i]^k, k=1,2,3.
 #' @param a: a vector of weights
 #' @param tau_lower: Lowest tau value
 #' (should be between -1 and 1 and less than tau_upper)
@@ -246,7 +254,11 @@ u_to_param_cubic <- function(a, tau_lower=-0.92, tau_upper=0.92){
                   arg[3]^2*arg[1], arg[3]^2*arg[2], arg[1]*arg[2]*arg[3]) %*% a
         tau <- scaled_tanh(temp, scaling_factor=scaling_factor, shift=shift)
       }else{
-        # just apply linear function here.
+        # do not include mixed terms here.
+        arg <- poly(arg, 3, raw=TRUE) # raw to just evaluate the polynomial terms
+        # only keep the entries and list them in a vector with
+        # c(arg[1],arg[2],..., arg[1]^2, arg[2]^2,..., arg[1]^3,arg[2]^3,...)
+        arg <- c(unname(arg[1:nrow(arg),]))
         tau <- scaled_tanh(a%*%arg, scaling_factor=scaling_Factor, shift=shift)
       }
       param <- ktau_to_par(family=family, tau=tau)
@@ -254,7 +266,7 @@ u_to_param_cubic <- function(a, tau_lower=-0.92, tau_upper=0.92){
     },
     error = function(e){
       stop(paste0("An error occurred:", e, ". Common causes of an error:
-          The function u_to_param_non_lin only supports families for which ktau_to_par is defined.
+          This function only supports families for which ktau_to_par is defined.
           The vector a does not have sufficiently many entries."))
     })
   })
