@@ -203,9 +203,9 @@ model.matrix(~ poly(a, b, degree = 2, raw = TRUE), data)
 
 # Test plot the kendalls tau values for different conditioning values
 
-#' takes a vector a and returns a function of u (vector of elements between 0 and 1).
-#' That function takes the dot product between a and u
-#' and returns a linear function of that dot product.
+#' Takes a vector a and returns a function of u (vector of elements between 0 and 1).
+#' That function takes the dot product between a and u, scales that to
+#' T_values and calculates a kendall's tau value using the tanh.
 #' @param a: a vector which needs to be a convex combination
 #' (i.e. all entries >=0 and they have to sum to 1)
 #' @param tau_lower: Lowest tau value, defaults to -0.92
@@ -238,10 +238,12 @@ u_to_ktau_linear <- function(a, tau_lower=-0.92, tau_upper=0.92){
 
 #' Takes a vector a and returns a function of u (vector of elements between 0 and 1)
 #' and of a string "family", which corresponds to a copula family.
-#' that function takes the dot product between a and u
-#' and returns a quadratic function of that dot product.
-#' @param a: a vector which needs to be a convex combination
-#' (i.e. all entries >=0 and they have to sum to 1)
+#' that function transforms the values u using qnorm (inverse normal dist.function),
+#' builds polynomial terms of degree 2 of these terms and then transforms them
+#' to the interval (tau_lower, tau_upper) using a scaled tanh.
+#' If dim(u) <=3 includes all terms u[i]*u[j], (powers and mixed terms).
+#' If dim(u) > 3 only includes the individual powers, u[i]^k, k=1,2.
+#' @param a: a vector of weights
 #' @param tau_lower: Lowest tau value
 #' (should be between -1 and 1 and less than tau_upper)
 #' @param tau_upper: Highest tau value
@@ -249,46 +251,18 @@ u_to_ktau_linear <- function(a, tau_lower=-0.92, tau_upper=0.92){
 #' @returns A function of u and family, which calculates the parameter of
 #' a copula given the conditioned values.
 u_to_ktau_quadratic <- function(a, tau_lower=-0.92, tau_upper=0.92){
-  return(function(u){
-    tryCatch({
-      T_upper <- fisher_z_transform(tau_lower)
-      T_lower <- fisher_z_transform(tau_upper)
-      T_val <- T_lower
-      if(length(u) == 1){
-        arg <- u
-        T_val <- 4*(T_upper- T_lower) * ((arg-0.5)^2) + T_lower
-      } else {
-        arg <- a %*% u
-        T_val <- (T_upper - T_lower) * ((arg-0.5)^2) + T_lower
-      }
-      tau <- inverse_fisher_transform(T_val)
-      return(tau)
-    },
-    error = function(e){
-      stop(paste0("An error occurred:", e))
-    })
-  })
-}
-
-#' takes a vector a and returns a function of u (vector of elements between 0 and 1)
-#' and of a string "family", which corresponds to a copula family.
-#' that function transforms the values u using qnorm (inverse normal dist.function)
-#' and then builds polynomial terms of degree 2, if dim(u) <=3, else a linear function of these
-#' with a as parameters.
-#' @param a: a vector of weights
-#' @param tau_lower: Lowest tau value
-#' (should be between -1 and 1 and less than tau_upper)
-#' @param tau_upper: Highest tau value
-#' (should be between -1 and 1 and greater than tau_lower)
-#' @returns A function of u, which calculates the kendalls tau value of
-#' a copula given the conditioned values.
-u_to_ktau_non_lin <- function(a, tau_lower=-0.92, tau_upper=0.92){
-  return(function(u){
+  return(function(u, family="gaussian"){
     tryCatch({
       # define parameters for the scaled tanh, so that the result will be between
       # tau_lower and tau_upper
       scaling_factor <- (tau_upper - tau_lower) / 2
       shift <- (tau_upper + tau_lower) / 2
+      # Onepar families that cannot model negative dependence:
+      # clayton, gumbel, joe
+      if(family %in% c("clayton", "gumbel", "joe") && tau_lower <= 0.001){
+        scaling_factor <- (tau_upper - 0.001) / 2
+        shift <- (tau_upper + 0.001) / 2
+      }
       arg <- qnorm(u)
       tau <- 0
       if(length(u) == 1){
@@ -303,7 +277,11 @@ u_to_ktau_non_lin <- function(a, tau_lower=-0.92, tau_upper=0.92){
                   arg[1]*arg[2], arg[1]*arg[3], arg[2]*arg[3]) %*% a
         tau <- scaled_tanh(temp, scaling_factor=scaling_factor, shift=shift)
       }else{
-        # just apply linear function here.
+        # do not include mixed terms here.
+        arg <- poly(arg, 2, raw=TRUE) # raw to just evaluate the polynomial terms
+        # only keep the entries and list them in a vector with
+        # c(arg[1],arg[2],..., arg[1]^2, arg[2]^2,...)
+        arg <- c(unname(arg[1:nrow(arg),]))
         tau <- scaled_tanh(a%*%arg, scaling_factor=scaling_Factor, shift=shift)
       }
       return(tau)
@@ -314,25 +292,33 @@ u_to_ktau_non_lin <- function(a, tau_lower=-0.92, tau_upper=0.92){
   })
 }
 
-#' takes a vector a and returns a function of u (vector of elements between 0 and 1)
+#' Takes a vector a and returns a function of u (vector of elements between 0 and 1)
 #' and of a string "family", which corresponds to a copula family.
-#' that function transforms the values u using qnorm (inverse normal dist.function)
-#' and then builds polynomial terms of degree 3, if dim(u) <=3, else a linear function of these
-#' with a as parameters.
+#' that function transforms the values u using qnorm (inverse normal dist.function),
+#' builds polynomial terms of degree 2 of these terms and then transforms them
+#' to the interval (tau_lower, tau_upper) using a scaled tanh.
+#' If dim(u) <=3 includes powers and mixed terms,
+#' If dim(u) > 3 only includes the individual powers, u[i]^k, k=1,2,3.
 #' @param a: a vector of weights
 #' @param tau_lower: Lowest tau value
 #' (should be between -1 and 1 and less than tau_upper)
 #' @param tau_upper: Highest tau value
 #' (should be between -1 and 1 and greater than tau_lower)
-#' @returns A function of u, which calculates the kendalls tau value of
+#' @returns A function of u and family, which calculates the parameter of
 #' a copula given the conditioned values.
-u_to_ktau_non_lin_cubic <- function(a, tau_lower=-0.92, tau_upper=0.92){
-  return(function(u){
+u_to_ktau_cubic <- function(a, tau_lower=-0.92, tau_upper=0.92){
+  return(function(u, family="gaussian"){
     tryCatch({
       # define parameters for the scaled tanh, so that the result will be between
       # tau_lower and tau_upper
       scaling_factor <- (tau_upper - tau_lower) / 2
       shift <- (tau_upper + tau_lower) / 2
+      # Onepar families that cannot model negative dependence:
+      # clayton, gumbel, joe
+      if(family %in% c("clayton", "gumbel", "joe") && tau_lower <= 0.001){
+        scaling_factor <- (tau_upper - 0.001) / 2
+        shift <- (tau_upper + 0.001) / 2
+      }
       arg <- qnorm(u)
       tau <- 0
       if(length(u) == 1){
@@ -353,7 +339,11 @@ u_to_ktau_non_lin_cubic <- function(a, tau_lower=-0.92, tau_upper=0.92){
                   arg[3]^2*arg[1], arg[3]^2*arg[2], arg[1]*arg[2]*arg[3]) %*% a
         tau <- scaled_tanh(temp, scaling_factor=scaling_factor, shift=shift)
       }else{
-        # just apply linear function here.
+        # do not include mixed terms here.
+        arg <- poly(arg, 3, raw=TRUE) # raw to just evaluate the polynomial terms
+        # only keep the entries and list them in a vector with
+        # c(arg[1],arg[2],..., arg[1]^2, arg[2]^2,..., arg[1]^3,arg[2]^3,...)
+        arg <- c(unname(arg[1:nrow(arg),]))
         tau <- scaled_tanh(a%*%arg, scaling_factor=scaling_Factor, shift=shift)
       }
       return(tau)
@@ -364,26 +354,25 @@ u_to_ktau_non_lin_cubic <- function(a, tau_lower=-0.92, tau_upper=0.92){
   })
 }
 
-
-
 tau_lower = 0.001
 tau_upper = 0.9
 func_lin_1d <- u_to_ktau_linear(c(1), tau_lower=tau_lower, tau_upper=tau_upper)
 func_lin_2d <- u_to_ktau_linear(c(0.7,0.3), tau_lower=tau_lower, tau_upper=tau_upper)
 func_lin_3d <- u_to_ktau_linear(c(0.2,0.5,0.3), tau_lower=tau_lower, tau_upper=tau_upper)
-func_non_lin_1d <- u_to_ktau_non_lin(c(1,1),tau_lower=tau_lower, tau_upper=tau_upper)
-func_non_lin_2d <- u_to_ktau_non_lin(c(0.7,0.3, 0.9,-0.4,0.8),tau_lower=tau_lower, tau_upper=tau_upper)
-func_non_lin_3d <- u_to_ktau_non_lin(
-  c(0.2,0.5,0.3,1,2,1,0.4,0.7,0.8),
+func_quadratic_1d <- u_to_ktau_quadratic(c(1,1),tau_lower=tau_lower, tau_upper=tau_upper)
+func_quadratic_2d <- u_to_ktau_quadratic(c(0.7,0.5, 0.9,-1.2,1.5),tau_lower=tau_lower, tau_upper=tau_upper)
+func_quadratic_3d <- u_to_ktau_quadratic(
+  c(0.7,0.4,-0.9,1.3,0.75,1.3,-0.6,0.5,-1.1),
   tau_lower=tau_lower, tau_upper=tau_upper)
-func_non_lin_cubic_1d <- u_to_ktau_non_lin_cubic(c(1,1,0.5),
+func_cubic_1d <- u_to_ktau_cubic(c(1.0,1.0,0.5),
                                 tau_lower=tau_lower, tau_upper=tau_upper)
-func_non_lin_cubic_2d <- u_to_ktau_non_lin_cubic(c(0.7,0.3, 0.9,-0.4,0.8,0.1,0.2,0.3,0.4),
+func_cubic_2d <- u_to_ktau_cubic(c(0.7,0.8, -0.9,0.4,0.8,1.1,-1.2,-1.3,1.0),
                                 tau_lower=tau_lower, tau_upper=tau_upper)
-func_non_lin_cubic_3d <- u_to_ktau_non_lin_cubic(
-  c(0.2, 0.5, 0.3,
-    1,   1.4, 1  ,0.4,0.7,0.8,
-    0.01,0.04,0.07,0.03,0.02,0.05,0.07,0.04,0.02,0.1),
+func_cubic_3d <- u_to_ktau_cubic(
+  c(0.7, 0.5, -1.3,
+    1,   1.4, 1  ,-1.4,0.7,-0.8,
+    1.1,-1.4,0.7,-0.3,0.4,
+    0.8, -0.7,1.4,-1.2,-0.6),
   tau_lower=tau_lower, tau_upper=tau_upper
 )
 
@@ -403,10 +392,10 @@ plot_cond_to_ktau_1d <- function(func_list, titles=-1, u_cond_vals=1:99/100){
   }
   par(mfrow=c(1,1))
 }
-plot_cond_to_ktau_1d(list(func_lin_1d, func_non_lin_1d, func_non_lin_cubic_1d),
+plot_cond_to_ktau_1d(list(func_lin_1d, func_quadratic_1d, func_cubic_1d),
                      titles = c("Linear function 1d",
-                                "Non-linear function 1d",
-                                "Non-linear cubic function 1d"))
+                                "Quadratic function 1d",
+                                "Cubic function 1d"))
 
 #' 3d plot of the cond to ktau function, for 2 conditioning variables
 plot_cond_to_ktau_2d <- function(func_list,
@@ -431,10 +420,12 @@ plot_cond_to_ktau_2d <- function(func_list,
                     col = "lightblue", border = "black", main=plot_title)
   }
 }
-plot_cond_to_ktau_2d(list(func_lin_2d, func_non_lin_2d, func_non_lin_cubic_2d),
-                     titles=c("Linear function 2d",
-                              "Non-linear function 2d",
-                              "Non-linear cubic function 2d"))
+plot_cond_to_ktau_2d(list(func_lin_2d),
+                     titles=c("Linear function 2d"))
+plot_cond_to_ktau_2d(list(func_quadratic_2d),
+                     titles=c("Quadratic function 2d"))
+plot_cond_to_ktau_2d(list(func_cubic_2d),
+                     titles=c("Cubic function 2d"))
 
 #' contours of the cond to ktau function with 2 conditional variables
 plot_ktau_contours_2d <- function(func_list,
@@ -470,7 +461,7 @@ plot_cond_to_ktau_3d <- function(cond_to_ktau_func,
                                  title="",
                                  u_cond_vals_1=1:99/100,
                                  u_cond_vals_2=1:99/100,
-                                 u_cond_vals_fixed=c(0.3,0.7)){
+                                 u_cond_vals_fixed=c(0.25,0.5,0.75)){
   # order of mar and oma: bottom, left, top, right. oma=outer margin, mar = inner margin
   par(mfrow = c(3, length(u_cond_vals_fixed)), mar = c(0.5, 0.5, 1, 0.5), oma = c(0.5, 0.5, 4, 0.5))
   for(fixed_dim in 1:3){
@@ -516,10 +507,10 @@ plot_cond_to_ktau_3d <- function(cond_to_ktau_func,
 }
 plot_cond_to_ktau_3d(func_lin_3d,
                      title="Linear Function 3d")
-plot_cond_to_ktau_3d(func_non_lin_3d,
-                     title="Non-linear function 3d")
-plot_cond_to_ktau_3d(func_non_lin_cubic_3d,
-                     title="Non-linear cubic function 3d")
+plot_cond_to_ktau_3d(func_quadratic_3d,
+                     title="Quadratic function 3d")
+plot_cond_to_ktau_3d(func_cubic_3d,
+                     title="Cubic function 3d")
 
 #' Contour plot of ktau for 3 conditioning variables, always one fixed
 #' Several 3d Plots for in total 3 conditioning variables, always one is fixed for the plots.
@@ -572,5 +563,67 @@ plot_ktau_contour_3d(func_non_lin_3d,
                      title="Non-linear function 3d",
                      u_cond_vals_fixed=c(0.25,0.5,0.75))
 plot_ktau_contour_3d(func_non_lin_cubic_3d,
-                     title="Non-linear cubic function 2d",
+                     title="Non-linear cubic function 3d",
                      u_cond_vals_fixed=c(0.25,0.5,0.75))
+
+
+
+# test for poly
+args_list <- list(1, c(1,2), c(1,2,3))
+
+cub <- poly(args_list[[2]], 3, raw=TRUE)
+arg_to_mult <- c(unname(cub[1:nrow(cub),]))
+arg_to_mult
+print(arg_to_mult)
+print(unname(cub[1:nrow(cub),]))
+
+
+
+library(dplyr)
+library(knitr)
+latex_table <- read.csv("results/LatexRelevantFields20250527.csv")
+# Assuming your data frame is called `df`
+lower_q_levs_latex_table <- c(0.05,0.1,0.15,0.2)
+upper_q_levs_latex_table <- c(0.95,0.9,0.85,0.8)
+q_levs_latex_table <- c(lower_q_levs_latex_table, upper_q_levs_latex_table)
+col_names_q_latex_table <- paste0("q.", q_levs_latex_table, "..0")
+
+latex_result_df <- latex_table %>%
+  mutate(across(all_of(col_names_q_latex_table), ~ .x / num_samples))
+
+latex_result_df <- latex_result_df %>%
+  mutate(across(all_of(col_names_q_latex_table), ~ round(.x, 4)))
+latex_result_df <-  latex_result_df %>%
+  mutate(param_cond_func_idx = recode(param_cond_func_idx, `1` = "linear", `2` = "quadratic", `3` = "cubic"))
+
+latex_result_df <- latex_result_df %>%
+  select(-all_of(c("train.set.loss", "test.set.loss")))
+df_1000 <- latex_result_df %>%
+  filter(abs(num_samples - 1000) < 1)
+df_1000  <- df_1000  %>%
+  select(-all_of(c("num_samples", "tau_lower")))
+df_10000 <- latex_result_df %>%
+  filter(abs(num_samples - 10000) < 1)
+df_10000  <- df_10000  %>%
+  select(-all_of(c("num_samples", "tau_lower")))
+
+kable(df_1000, format="latex", booktabs="TRUE")
+kable(df_10000,format="latex", booktabs="TRUE")
+head(latex_result_df)
+kable(latex_result_df, format = "latex", booktabs = TRUE)
+# library(xtable)
+# sink("results/latexTable20250528.tex")
+# print(xtable(latex_result_df), include.rownames = FALSE, booktabs = TRUE)
+# sink()
+
+library(rvinecopulib)
+struct_mat_4d <- matrix(c(3,3,3,3,
+                          2,2,2,0,
+                          4,4,0,0,
+                          1,0,0,0), ncol=4, byrow=TRUE)
+
+struct_mat_3d <- matrix(c(1,1,1,
+                          2,2,0,
+                          3,0,0), ncol=3, byrow=TRUE)
+plot(as_rvine_matrix(struct_mat_3d),1:2)
+plot(as_rvine_matrix(struct_mat_4d),1:3)
