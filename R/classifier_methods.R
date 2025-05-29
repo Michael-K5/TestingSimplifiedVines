@@ -226,7 +226,7 @@ compute_integral <- function(model,
     if(user_info){
       print("Evaluating noise density (simplified vine)")
     }
-    p_simp <- dvinecop(samples, fitted_cop)
+    p_simp <- dvinecop(samples, fitted_vine)
   }
   if(user_info){
     print("Evaluating neural network output")
@@ -297,7 +297,6 @@ perform_quant_reg <- function(
   output <- list(alternative_better,
                  simp_better)
   return(output)
-
 }
 
 
