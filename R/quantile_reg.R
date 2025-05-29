@@ -20,8 +20,6 @@ csv_filename <- paste0("data/non_simplified_sim_",data_dim,"d_",last_data_simula
 orig_data <- as.matrix(read.csv(csv_filename))
 orig_data <- unname(orig_data) #remove col- and rownames
 
-
-
 cor_facs <- correction_factors(model, obs=orig_data, nu=nu)
 plot(cor_facs)
 remove_top <- floor(0.01 * length(cor_facs))
@@ -36,7 +34,7 @@ int_val <- compute_integral(model=model,
                             fitted_vine = fitted_cop,
                             nu=nu,
                             data_dim_if_unif = as.integer(data_dim),
-                            n_samples=10000,
+                            n_samples=100000,
                             user_info=TRUE)
 int_val
 # temp_norm <- temp / int_val
