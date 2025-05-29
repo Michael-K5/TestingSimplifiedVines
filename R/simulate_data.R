@@ -1,9 +1,13 @@
 # This script simulates non-simplified copula data, using the functions from
 # the script simulate_non_simplified_vine.R
 source("R/simulate_non_simplified_vine.R")
+# If plots of the contours or kendalls tau values are desired
+source("R/plotting_methods.R")
 
 # Simulate Data
-sim_5d_linear <- function(num_samples, tau_lower=-0.92, tau_upper=0.92){
+sim_5d_linear <- function(num_samples,
+                          tau_lower=-0.92,
+                          tau_upper=0.92){
   struct_mat <- matrix(c(2,3,2,1,1,
                          3,2,1,2,0,
                          1,1,3,0,0,
@@ -45,16 +49,17 @@ sim_5d_linear <- function(num_samples, tau_lower=-0.92, tau_upper=0.92){
                                        rotations = list(list(0,0,0,0),list(0,0,0), list(0,0), list(0)))
   return(u_data)
 }
-u_linear <- sim_5d_linear(10000)
-#head(u_linear)
+tau_lower=0.001
+tau_upper=0.9
+u_linear <- sim_5d_linear(10000, tau_lower=tau_lower, tau_upper=tau_upper)
+pairs_copula_data(u_linear)
 #fit.struct_mat<-vinecop(u_linear,family_set="onepar",structure=struct_mat)
 #print.data.frame(summary(fit.struct_mat),digit=2)
-pairs_copula_data(u_linear)
-# plot_contours_1d(param_cond_func_1d=u_to_param_linear(c(1)), family_vals=c("frank", "gaussian", "joe"))
-# plot_contours_2d(param_cond_func_2d=u_to_param_linear(c(0.7,0.3), tau_lower=tau_lower, tau_upper=tau_upper),
-#                 family_name="gaussian")
-# plot_contours_2d(param_cond_func_2d=u_to_param_linear(c(0.4,0.6), tau_lower=tau_lower, tau_upper=tau_upper),
-#                  family_name="gumbel")
+plot_contours_1d(param_cond_func_1d=u_to_param_linear(c(1)), family_vals=c("frank", "gaussian", "joe"))
+plot_contours_2d(param_cond_func_2d=u_to_param_linear(c(0.7,0.3), tau_lower=tau_lower, tau_upper=tau_upper),
+                family_name="gaussian")
+plot_contours_2d(param_cond_func_2d=u_to_param_linear(c(0.4,0.6), tau_lower=tau_lower, tau_upper=tau_upper),
+                 family_name="frank")
 
 sim_5d_quadratic <- function(num_samples, tau_lower=0.001, tau_upper=0.92){
   struct_mat <- matrix(c(2,3,2,1,1,
@@ -71,17 +76,27 @@ sim_5d_quadratic <- function(num_samples, tau_lower=0.001, tau_upper=0.92){
                       c(ktau_to_par(family=family_test[[1]][[2]], tau=0.3)),
                       c(ktau_to_par(family=family_test[[1]][[3]], tau=-0.1)),
                       c(ktau_to_par(family=family_test[[1]][[4]], tau=0.1)))
+  current_sim_2d_quad_weights <- list(
+    c(0.7,0.3, 0.9,-0.4,0.8),
+    c(0.4,0.6,1,0.7,2)
+  )
+  alternative_2d_quad_weights <- list(
+    c(0.7, 0.5,0.9,-1.2,1.5),
+    c(0.4,-0.8,1,0.7,2)
+  )
+  current_sim_3d_quad_weights <-c(0.2,0.5,0.3,1,2,1,0.4,0.7,0.8)
+  alternative_3d_quad_weights <- c(0.7,0.4,-0.9,1.3,0.75,1.3,-0.6,0.5,-1.1)
   param_cond_funcs_test <- list(list(u_to_param_quadratic(c(1,1),
                                                         tau_lower=tau_lower, tau_upper=tau_upper),
                                      u_to_param_quadratic(c(1,0.7),
                                                         tau_lower=tau_lower, tau_upper=tau_upper),
                                      u_to_param_quadratic(c(1,2),
                                                         tau_lower=tau_lower, tau_upper=tau_upper)),
-                                list(u_to_param_quadratic(c(0.7,0.3, 0.9,-0.4,0.8),
+                                list(u_to_param_quadratic(alternative_2d_quad_weights[[1]],
                                                         tau_lower=tau_lower, tau_upper=tau_upper),
-                                     u_to_param_quadratic(c(0.4,0.6,1,0.7,2),
+                                     u_to_param_quadratic(alternative_2d_quad_weights[[2]],
                                                         tau_lower=tau_lower, tau_upper=tau_upper)),
-                                list(u_to_param_quadratic(c(0.2,0.5,0.3,1,2,1,0.4,0.7,0.8),
+                                list(u_to_param_quadratic(alternative_3d_quad_weights,
                                                         tau_lower=tau_lower, tau_upper=tau_upper)))
   u_data <- simulate_non_simp_parallel(n_samples = num_samples,
                                        struct = struct_mat,
@@ -91,7 +106,7 @@ sim_5d_quadratic <- function(num_samples, tau_lower=0.001, tau_upper=0.92){
                                        rotations = list(list(0,0,0,0),list(0,0,0), list(0,0), list(0)))
   return(u_data)
 }
-u_5d_quad <- sim_5d_quadratic(1000)
+u_5d_quad <- sim_5d_quadratic(5000)
 pairs_copula_data(u_5d_quad)
 
 
@@ -110,19 +125,31 @@ sim_5d_cubic <- function(num_samples, tau_lower=0.001, tau_upper=0.9){
                       c(ktau_to_par(family=family_test[[1]][[2]], tau=0.3)),
                       c(ktau_to_par(family=family_test[[1]][[3]], tau=-0.1)),
                       c(ktau_to_par(family=family_test[[1]][[4]], tau=0.1)))
+  current_sim_2d_cub_weights <- list(
+    c(0.7,0.3, 0.9,-0.4,0.8,0.1,0.2,0.3,0.4),
+    c(0.4,0.6,1,0.7,2,0.01,0.02,0.04,0.03)
+  )
+  alternative_2d_cub_weights <- list(
+    c(0.7,0.8, -0.9,0.4,0.8,1.1,-1.2,-1.3,1.0),
+    c(0.4,0.6,1,0.7,2,-1.1,1.2,-0.9,-0.3)
+  )
+  current_sim_3d_cub_weights <- c(0.2,0.5,0.3,
+                                  1,2,1,0.4,0.7,0.8,
+                                  0.01,0.02,0.03,0.04,0.05,0.06,0.07,0.08,0.09,0.1)
+  alternative_3d_cub_weights <- c(0.7, 0.5, -1.3,
+                                  1,   1.4, 1  ,-1.4,0.7,-0.8,
+                                  1.1,-1.4,0.7,-0.3,0.4,0.8,-0.7,1.4,-1.2,-0.6)
   param_cond_funcs_test <- list(list(u_to_param_cubic(c(1,1,0.5),
                                                       tau_lower=tau_lower, tau_upper=tau_upper),
                                      u_to_param_cubic(c(1,0.7,0.3),
                                                       tau_lower=tau_lower, tau_upper=tau_upper),
                                      u_to_param_cubic(c(1,2,0.1),
                                                       tau_lower=tau_lower, tau_upper=tau_upper)),
-                                list(u_to_param_cubic(c(0.7,0.3, 0.9,-0.4,0.8,0.1,0.2,0.3,0.4),
+                                list(u_to_param_cubic(alternative_2d_cub_weights[[1]],
                                                       tau_lower=tau_lower, tau_upper=tau_upper),
-                                     u_to_param_cubic(c(0.4,0.6,1,0.7,2,0.01,0.02,0.04,0.03),
+                                     u_to_param_cubic(alternative_2d_cub_weights[[2]],
                                                       tau_lower=tau_lower, tau_upper=tau_upper)),
-                                list(u_to_param_cubic(c(0.2,0.5,0.3,
-                                                        1,2,1,0.4,0.7,0.8,
-                                                        0.01,0.02,0.03,0.04,0.05,0.06,0.07,0.08,0.09,0.1),
+                                list(u_to_param_cubic(alternative_3d_cub_weights,
                                                       tau_lower=tau_lower, tau_upper=tau_upper)))
   u_data <- simulate_non_simp_parallel(n_samples = num_samples,
                                        struct = struct_mat,
@@ -132,7 +159,7 @@ sim_5d_cubic <- function(num_samples, tau_lower=0.001, tau_upper=0.9){
                                        rotations = list(list(0,0,0,0),list(0,0,0), list(0,0), list(0)))
   return(u_data)
 }
-u_5d_cubic <- sim_5d_cubic(1000)
+u_5d_cubic <- sim_5d_cubic(5000)
 pairs_copula_data(u_5d_cubic)
 
 # Simulate different data
