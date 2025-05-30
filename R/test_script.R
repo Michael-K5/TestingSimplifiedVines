@@ -627,3 +627,120 @@ struct_mat_3d <- matrix(c(1,1,1,
                           3,0,0), ncol=3, byrow=TRUE)
 plot(as_rvine_matrix(struct_mat_3d),1:2)
 plot(as_rvine_matrix(struct_mat_4d),1:3)
+
+
+# Evaluate the experiment results
+library(dplyr)
+library(rlang)
+results_df <- read.csv("results/2025-05-27.csv")
+#head(results_df)
+lower_q_levs <- seq(0.01,0.30,0.01)
+upper_q_levs <- seq(0.7,0.99,0.01)
+q_levs <- c(lower_q_levs, upper_q_levs)
+col_names_q_levs <- paste0("q.", q_levs, "..0")
+results_df <- results_df %>%
+  dplyr::mutate(across(all_of(col_names_q_levs), ~ .x / num_samples))
+head(results_df)
+print(nrow(results_df))
+lower_q_levs_compact <- seq(0.05,0.2,0.05)
+lower_q_levs_compact <- c(0.3)
+thresholds <- seq(0.1,0.95,0.1)
+for (q_lev in lower_q_levs_compact){
+  print(paste0("Quantile Level: ", q_lev))
+  for (thresh in thresholds){
+    num_pos_tests <- sum(results_df[paste0("q.", q_lev, "..0")] > thresh)
+    print(paste0("At the threshold ",
+                 thresh,
+                 "A total of ",
+                 num_pos_tests,
+                 " combinations indicate non simplified data."
+    )
+    )
+  }
+}
+head(results_df)
+
+grouped_results_df <- results_df %>%
+  group_by(tau_upper, num_samples) %>%
+  summarise(
+    mean_10 = mean(q.0.1..0, na.rm = TRUE),
+    median_10 = median(q.0.1..0, na.rm = TRUE),
+    min_10 = min(q.0.1..0, na.rm = TRUE),
+    max_10 = max(q.0.1..0, na.rm = TRUE),
+    q25_10 = quantile(q.0.1..0, probs = 0.25, na.rm = TRUE),
+    q75_10 = quantile(q.0.1..0, probs = 0.75, na.rm = TRUE)
+  )
+
+grouped_results_df
+
+summarise_quantile_col <- function(df, group_by_expr, q_var) {
+  q_name <- paste0("q.", q_var, "..0")
+  temp_df <- df %>%
+    group_by(across(all_of(group_by_expr))) %>%
+    summarise(
+      mean = mean(!!sym(q_name), na.rm = TRUE),
+      median = median(!!sym(q_name), na.rm = TRUE),
+      min = min(!!sym(q_name), na.rm = TRUE),
+      max = max(!!sym(q_name), na.rm = TRUE),
+      q25 = quantile(!!sym(q_name), probs = 0.25, na.rm = TRUE),
+      q75 = quantile(!!sym(q_name), probs = 0.75, na.rm = TRUE),
+      .groups = "drop"
+    )
+  return(temp_df)
+}
+
+q_val <- 0.15
+head(results_df)
+group_by_cols <- c("tau_upper", "num_samples", "dim", "param_cond_func_idx")
+for(col_name in group_by_cols){
+  aggregated_df <- summarise_quantile_col(results_df, group_by_expr = col_name,q_var=q_val)
+  print(aggregated_df)
+}
+# param cond func idx hardly seems to matter, although the quadratic structure seems
+# to be a bit harder to detect as "non simplified" compared to the linear or cubic structures.
+aggregated_df <- summarise_quantile_col(
+  results_df,
+  group_by_expr = c("tau_upper", "num_samples"),
+  q_var=q_val)
+aggregated_df
+aggregated_df <- summarise_quantile_col(
+  results_df,
+  group_by_expr = c("tau_upper", "dim"),
+  q_var=q_val)
+aggregated_df
+aggregated_df <- summarise_quantile_col(
+  results_df,
+  group_by_expr = c("tau_upper", "param_cond_func_idx"),
+  q_var=q_val)
+aggregated_df
+aggregated_df <- summarise_quantile_col(
+  results_df,
+  group_by_expr = c("num_samples", "dim"),
+  q_var=q_val)
+aggregated_df
+
+aggregated_df <- summarise_quantile_col(
+  results_df,
+  group_by_expr = c("tau_upper", "dim", "num_samples"),
+  q_var=q_val)
+aggregated_df
+# With low or medium dependence (tau_max = 0.3 or 0.6):
+# Test seems to work better for fewer samples (Or maybe just noisier?)
+# -> Try the same nu, so for example nu = 8 in both cases, independent of the number of samples
+# To isolate the effects of the num_samples.
+# But with 0.6 the numbers get much closer together
+
+# For tau_max = 0.9: More samples seem to be better at indicating that the data is non simplified,
+# IN dimension 3 with 1000 samples, there seems to be almost no difference between the dependence
+# -> Maybe in dimension 3 the "non-simplified" is just too close to the simplified one anyways.
+# For tau_max = 0.9, the higher the dimensionality of the data the more often the test
+# indicates non-simplified data. Also as expected.
+
+# In dimension 5, the number of test results where the test indicates non simplified
+# data, clearly increases with the value for kendall's tau, as expected.
+
+
+# Summary: With higher dimensions and higher kendalls tau values, the test behaves as expected
+# However, for the other values the results seem a bit odd, maybe the model is too noisy in those cases.
+# Try to evaluate the quantiles with 0.9 or 0.85 as well -> maybe they also indicate that the simplified model
+# is better in some of those cases. Then it's definitely just noisy measurements.
