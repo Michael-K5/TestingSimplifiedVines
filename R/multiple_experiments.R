@@ -10,16 +10,6 @@ nus <- list(10,4)
 dims <- list(3,4,5)
 # each list element contains first the lower, then the upper limit
 tau_limits <- list(c(0.001,0.3), c(0.001,0.6), c(0.001,0.9))
-# TEST 30.5.
-# 2 different number of samples.
-num_samples <- list(1000)
-# fraction of number of noise to true samples. Higher, if only 1000 samples given.
-nus <- list(10)
-# dimensions of the simulated data.
-dims <- list(4)
-# each list element contains first the lower, then the upper limit
-tau_limits <- list(c(0.001,0.6))
-# END TEST 30.5.
 # Quantile Levels to calculate:
 lower_q_levs <- seq(0.01,0.30,0.01)
 upper_q_levs <- seq(0.70,0.99,0.01)
@@ -259,7 +249,7 @@ run_simulations <- function(num_samples,
             train_set_eval <- model %>% evaluate(x_train, y_train)
             int_val <- compute_integral(model=model,
                                         fitted_vine = fitted_vine,
-                                        nu=nu,
+                                        nu=nu_var,
                                         data_dim_if_unif = ncol(orig_data),
                                         n_samples=50000,
                                         user_info=FALSE)
@@ -328,7 +318,7 @@ result_df <- run_simulations(
   families=families,
   initial_params=initial_params,
   rotations=rotations,
-  filename=""
+  filename=results_filename
   )
 head(result_df)
 
