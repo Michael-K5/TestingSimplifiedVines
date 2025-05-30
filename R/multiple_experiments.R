@@ -10,6 +10,16 @@ nus <- list(10,4)
 dims <- list(3,4,5)
 # each list element contains first the lower, then the upper limit
 tau_limits <- list(c(0.001,0.3), c(0.001,0.6), c(0.001,0.9))
+# TEST 30.5.
+# 2 different number of samples.
+num_samples <- list(1000)
+# fraction of number of noise to true samples. Higher, if only 1000 samples given.
+nus <- list(10)
+# dimensions of the simulated data.
+dims <- list(4)
+# each list element contains first the lower, then the upper limit
+tau_limits <- list(c(0.001,0.6))
+# END TEST 30.5.
 # Quantile Levels to calculate:
 lower_q_levs <- seq(0.01,0.30,0.01)
 upper_q_levs <- seq(0.70,0.99,0.01)
@@ -55,6 +65,11 @@ families <- list(families_3d, families_4d, families_5d)
 initial_params <- list(params_3d, params_4d, params_5d)
 rotations <- list(rotations_3d, rotations_4d, rotations_5d)
 
+#struct_mats <- list(struct_mat_4d)
+#families <- list(families_4d)
+#initial_params <- list(params_4d)
+#rotations <- list(rotations_4d)
+
 #' Run the simulations
 #' @param num_samples: list of integers, that determine for what different
 #' number of samples drawn from a non-simplified vine copula the experiments should be run.
@@ -75,6 +90,12 @@ rotations <- list(rotations_3d, rotations_4d, rotations_5d)
 #' for the i-th unconditioned copula in the first tree, defined by struct_mats[[i]]
 #' @param rotations: List of (list of list of int): The i-th element contains the
 #' rotations of the copulas specified in struct_mats[[i]]
+#' @param int_dev_threshold: Float, defaults to 0.5: If the monte carlo integral of the
+#' non-parametric model deviates by more than int_dev_threshold from 1 (which should be the
+#' integral of a density), then the same combination of parametrers
+#' is run again max_retries times, to try to find a more appropriate model.
+#' @param max_retries: Integer, defaults to 3: How often to retry evaluating the model if
+#' the monte carlo integral value is not close enough to 1 (as measured by int_dev_threshold)
 #' @param filename: string, defaults to "": If not "", then the results are written to
 #' a csv file, with name specified as filename
 #' @returns result_df: A Dataframe with the results of the experiments.
@@ -86,6 +107,8 @@ run_simulations <- function(num_samples,
                             families,
                             initial_params,
                             rotations,
+                            int_dev_threshold = 0.5,
+                            max_retries = 3,
                             filename=""){
   # Run big simulation
   total_runs <- 0
@@ -221,14 +244,26 @@ run_simulations <- function(num_samples,
           x_test <- split_output[[2]]
           y_train <- split_output[[3]]
           y_test <- split_output[[4]]
-          # delete model from previous iteration
-          model <- 0
-          # define new model
-          model <- build_model(input_dim=ncol(x_train), use_tanh=FALSE)
-          train_model_output <- train_model(model, x_train, y_train, num_epochs=200)
-          model <- train_model_output[[1]]
-          test_set_eval <- model %>% evaluate(x_test, y_test)
-          train_set_eval <- model %>% evaluate(x_train, y_train)
+          int_val <- -1
+          retry_num <- 0
+          # Loop to discard a certain value, if the integral deviates too much from 1
+          while(abs(int_val - 1) > int_dev_threshold && retry_num < max_retries){
+            retry_num = retry_num +1
+            # delete model from previous iteration
+            model <- 0
+            # define new model
+            model <- build_model(input_dim=ncol(x_train), use_tanh=FALSE)
+            train_model_output <- train_model(model, x_train, y_train, num_epochs=200)
+            model <- train_model_output[[1]]
+            test_set_eval <- model %>% evaluate(x_test, y_test)
+            train_set_eval <- model %>% evaluate(x_train, y_train)
+            int_val <- compute_integral(model=model,
+                                        fitted_vine = fitted_vine,
+                                        nu=nu,
+                                        data_dim_if_unif = ncol(orig_data),
+                                        n_samples=50000,
+                                        user_info=FALSE)
+          }
           g_vals <- compute_gvals(model, orig_data, nu=nu_var)
           output <- perform_quant_reg(g_vals,
                                       orig_data,
@@ -246,11 +281,11 @@ run_simulations <- function(num_samples,
                               train_set_eval[[1]],
                               train_set_eval[[2]],
                               test_set_eval[[1]],
-                              test_set_eval[[2]]
+                              test_set_eval[[2]],
+                              int_val
                               )
           # append to the results list, as a list, to keep the rows separated
           all_results <- append(all_results, list(current_result))
-
         }
       }
     }
@@ -271,7 +306,8 @@ run_simulations <- function(num_samples,
                             "train set loss",
                             "train set accuracy",
                             "test set loss",
-                            "test set accuracy")
+                            "test set accuracy",
+                            "MC Integral")
   if(filename != ""){
     write.csv(results_df, file = filename, row.names = FALSE)
     print(paste("Data saved to:", filename))
@@ -292,7 +328,7 @@ result_df <- run_simulations(
   families=families,
   initial_params=initial_params,
   rotations=rotations,
-  filename=results_filename
+  filename=""
   )
 head(result_df)
 
