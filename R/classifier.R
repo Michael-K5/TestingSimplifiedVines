@@ -5,10 +5,10 @@ library(keras)
 library(tensorflow)
 source("R/classifier_methods.R")
 # Parameters to determine, which data to load.
-last_data_simulation_date <- "2025-05-23"
+last_data_simulation_date <- "2025-06-02"
 data_dim <- 5
 # fraction of noise to true samples (to determine how many noise samples to create)
-nu <- 5
+nu <- 4
 # load data
 csv_filename <- paste0("data/non_simplified_sim_",data_dim,"d_",last_data_simulation_date,".csv")
 orig_data <- as.matrix(read.csv(csv_filename))
@@ -26,7 +26,8 @@ saveRDS(fitted_vine, file = copula_path)
 # simulate from the simplified vine, to train a classifier later.
 num_samples <- num_rows * nu# number of samples to create from the fitted vine
 simplified_samples <- rvinecop(num_samples, fitted_vine)
-#pairs_copula_data(simplified_samples)
+# plot at most first 10 k for faster rendering
+pairs_copula_data(simplified_samples[1:min(10000, num_samples),])
 
 split_output <- train_test_split(orig_data, simplified_samples, stratified=TRUE)
 x_train <- split_output[[1]]
@@ -61,6 +62,8 @@ print(paste0(
   nrow(simplified_samples) / (nrow(simplified_samples) + nrow(orig_data))
   )
 )
+int_val <- compute_integral(model, fitted_vine, n_samples=50000, nu=4,data_dim_if_unif=5,user_info=TRUE)
+int_val
 # save the model for reusing it later
 # Get the current date in YYYY-MM-DD format
 current_date <- Sys.Date()

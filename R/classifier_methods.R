@@ -185,6 +185,33 @@ non_param_cop <- function(model, fitted_vine, obs, nu=1){
   return(c_np)
 }
 
+#' Count number of neural network parameters
+#' @param weights: The weights of a neural network, accessible via model$weights
+#' for a tensorflow neural network called model
+#' @returns num_params (integer): total number of parameters in the network
+count_NN_params <- function(weights) {
+  num_params <- sum(sapply(weights, function(w) {
+    shape <- w$shape$as_list()
+    prod(unlist(shape))
+  }))
+  return(num_params)
+}
+
+#' Get number of copula parameters
+#' @param fitted_vine: A copula model (from rvinecopulib)
+#' @returns num_params (integer): total number of parameters in the vine copula model
+get_num_cop_params <- function(fitted_vine){
+  # Assume `fit` is your vinecop model from rvinecopulib
+  num_params <- sum(sapply(fitted_vine$pair_copulas, function(pc) {
+    # Each pc is a matrix (upper triangular) of pair copula objects
+    sum(sapply(pc, function(cop) {
+      if (is.null(cop)) return(0)
+      length(cop$parameters)
+    }))
+  }))
+  return(num_params)
+}
+
 #' Monte Carlo integral of non_param_cop (using importance sampling)
 #' @param model: The classifier trained to distinguish non-simplified data
 #' with labels 1 from simplified data with labels 0

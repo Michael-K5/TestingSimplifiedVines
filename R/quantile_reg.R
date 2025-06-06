@@ -5,10 +5,10 @@ source("R/classifier_methods.R")
 library(keras)
 library(rvinecopulib)
 # Parameters to determine, which model and data to load.
-last_data_simulation_date <- "2025-05-23"
-last_train_date <- "2025-05-23"
+last_data_simulation_date <- "2025-06-02"
+last_train_date <- "2025-06-02"
 data_dim <- "5"
-nu <- 5 # T_n/T_c, the ratio of noise to observed samples during training
+nu <- 4 # T_n/T_c, the ratio of noise to observed samples during training
 # load the Neural Network Classifier
 model_path <- paste0("models/NN_", data_dim, "d_", last_train_date, ".keras")
 model <- load_model_hdf5(model_path)

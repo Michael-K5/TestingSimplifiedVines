@@ -254,6 +254,22 @@ run_simulations <- function(num_samples,
                                         n_samples=50000,
                                         user_info=FALSE)
           }
+          # compute log likelihood under the simplified vine copula model and under the new model
+          # on the train and on the test set
+          log_lik_simplified_train <- sum(log(dvinecop(x_train, fitted_vine)))
+          log_lik_NN_train <- sum(log(non_param_cop(
+            model=model,
+            fitted_vine=fitted_vine,
+            obs=x_train,
+            nu=nu_var)))
+          log_lik_simplified_test <- sum(log(dvinecop(x_test, fitted_vine)))
+          log_lik_NN_train <- sum(log(non_param_cop(
+            model=model,
+            fitted_vine=fitted_vine,
+            obs=x_test,
+            nu=nu_var)))
+          NN_num_params <- count_NN_params(weights=model$weights)
+          simp_cop_num_params <- get_num_cop_params(fitted_vine)
           g_vals <- compute_gvals(model, orig_data, nu=nu_var)
           output <- perform_quant_reg(g_vals,
                                       orig_data,
