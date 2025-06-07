@@ -77,7 +77,8 @@ lr_schedule_fun <- function(epoch, lr) {
   }
 }
 #' Defines and compiles a neural network for binary classification.
-#' Activation function is leaky_relu, output is one layer with sigmoid activation
+#' Activation function is leaky_relu, output is one layer with no activation
+#' (to train a binary classifier with from_logits=TRUE option)
 #' @param input_dim: dimension of the input, defaults to 5
 #' @param hidden_units: vector containing the number of units per layer.
 #' Defaults to c(20,10)
@@ -98,20 +99,25 @@ build_model <- function(
     model <- keras_model_sequential() %>%
       layer_dense(units = hidden_units[1], input_shape = input_dim, activation='tanh') %>%
       layer_dense(units = hidden_units[2], activation='tanh') %>%
-      layer_dense(units = 1, activation = 'sigmoid') # sigmoid activation, for binary classification
+      layer_dense(units = 1)
   } else {
     model <- keras_model_sequential() %>%
       layer_dense(units = hidden_units[1], input_shape = input_dim) %>%
       layer_activation_leaky_relu(alpha = leaky_relu_alpha) %>%
       layer_dense(units = hidden_units[2]) %>%
       layer_activation_leaky_relu(alpha = leaky_relu_alpha) %>%
-      layer_dense(units = 1, activation = 'sigmoid') # sigmoid activation, for binary classification
+      layer_dense(units = 1)
   }
+  # Define binary accuracy metric from logit level
+  custom_accuracy_from_logits <- keras::custom_metric("binary_accuracy_from_logits", function(y_true, y_pred) {
+    y_pred_prob <- keras::k_sigmoid(y_pred)
+    keras::metric_binary_accuracy(y_true, y_pred_prob)
+  })
   # compile the model, define optimizer, loss and metrics
   model %>% compile(
     optimizer = keras$optimizers$Adam(learning_rate=initial_lr),
-    loss = keras$losses$BinaryCrossentropy(),
-    metrics = keras$metrics$BinaryAccuracy()
+    loss = keras$losses$BinaryCrossentropy(from_logits=TRUE),
+    metrics = list(custom_accuracy_from_logits)
   )
   return(model)
 }
@@ -167,7 +173,8 @@ train_model <- function(
 #' @returns The correction factors
 correction_factors <- function(model, obs, nu=1){
   predictions <- model %>% predict(obs)
-  cor_factors <- nu * predictions/(1-predictions)
+  # cast outputs of neural net to numeric, just to be sure
+  cor_factors <- exp(as.numeric(predictions) + log(nu))
   return(cor_factors)
 }
 
@@ -273,10 +280,10 @@ compute_gvals <- function(
     orig_data,
     nu=1){
   predictions <- model %>% predict(orig_data)
-  # here a classifier p(u) was trained on the data. to get the values g(u),
-  # as defined in the thesis, g(u) = log(\nu \cdot p(u)/(1-p(u))) needs to be computed,
-  # where nu = T_n/T_c, the fraction of number of noise samples to observed samples
-  g_vals <- log(nu * predictions / (1-predictions)) # G(u, \eta) from the thesis
+  # here a classifier on the logit level h(u) was trained on the data. to get the values g(u),
+  # as defined in the thesis, g(u) = log(nu * p(u)/(1-p(u))) = log(nu * exp(h(u))) = h(u) + log(nu)
+  # needs to be computed, where nu is the fraction of number of noise samples to observed samples
+  g_vals <- as.numeric(predictions) + log(nu)
   return(g_vals)
 }
 
