@@ -5,7 +5,7 @@ library(keras)
 library(tensorflow)
 source("R/classifier_methods.R")
 # Parameters to determine, which data to load.
-last_data_simulation_date <- "2025-06-02"
+last_data_simulation_date <- "2025-06-07"
 data_dim <- 5
 # fraction of noise to true samples (to determine how many noise samples to create)
 nu <- 4
@@ -35,6 +35,9 @@ x_test <- split_output[[2]]
 y_train <- split_output[[3]]
 y_test <- split_output[[4]]
 
+#nrow(x_train[y_train==1,])
+#nrow(x_test[y_test==1,])
+#nrow(x_train)
 model <- build_model(
     input_dim=5,
     hidden_units=c(20,10), # 2 hidden layers with 20 and 10 units respectively.
@@ -50,10 +53,10 @@ train_model_output <- train_model(
 )
 model <- train_model_output[[1]]
 history <- train_model_output[[2]]
-
-plot(history) # training and validation loss and accuracy, learning rate
+# training and validation loss and accuracy, learning rate
+# plot(history)
 # remove learning rate from plot
-plot(history, metrics = c("loss", "binary_accuracy"))
+plot(history, metrics = c("loss", "binary_accuracy_from_logits"))
 # evaluate the model on the test set
 loss_and_metrics <- model %>% evaluate(x_test, y_test)
 print(loss_and_metrics)
@@ -62,7 +65,7 @@ print(paste0(
   nrow(simplified_samples) / (nrow(simplified_samples) + nrow(orig_data))
   )
 )
-int_val <- compute_integral(model, fitted_vine, n_samples=50000, nu=4,data_dim_if_unif=5,user_info=TRUE)
+int_val <- compute_integral(model, fitted_vine, n_samples=50000, nu=nu,data_dim_if_unif=ncol(orig_data),user_info=TRUE)
 int_val
 # save the model for reusing it later
 # Get the current date in YYYY-MM-DD format
@@ -71,6 +74,42 @@ current_date <- Sys.Date()
 model_file_name <- paste0("models/NN_", ncol(x_train), "d_",current_date, ".keras")
 #save_model_hdf5(model, filepath = model_file_name)
 keras$Model$save(model, filepath=model_file_name)
+
+log_lik_simp_train_orig <- sum(log(dvinecop(x_train[y_train==1,], fitted_vine)))
+log_lik_NN_train_orig <- sum(log(non_param_cop(
+  model=model,
+  fitted_vine=fitted_vine,
+  obs=x_train[y_train==1,],
+  nu=nu)))
+log_lik_simp_test_orig <- sum(log(dvinecop(x_test[y_test==1,], fitted_vine)))
+log_lik_NN_test_orig <- sum(log(non_param_cop(
+  model=model,
+  fitted_vine=fitted_vine,
+  obs=x_test[y_test==1,],
+  nu=nu)))
+NN_num_params <- count_NN_params(weights=model$weights)
+simp_cop_num_params <- get_num_cop_params(fitted_vine)
+deg_free <- NN_num_params - simp_cop_num_params
+LRT_stat_train <- -2*(as.numeric(log_lik_simp_train_orig) - as.numeric(log_lik_NN_train_orig))
+LRT_stat_test <- -2*(as.numeric(log_lik_simp_test_orig) - as.numeric(log_lik_NN_test_orig))
+# compute p(chisq(df=deg_free) > LRT_stat) (for train and test set)
+p_value_train <- pchisq(LRT_stat_train, df = deg_free, lower.tail = FALSE)
+p_value_test <- pchisq(LRT_stat_test, df = deg_free, lower.tail = FALSE)
+AIC_NN <- 2*NN_num_params - 2* (log_lik_NN_train_orig + log_lik_NN_test_orig)
+BIC_NN <- log(nrow(orig_data))*NN_num_params - 2* (log_lik_NN_train_orig + log_lik_NN_test_orig)
+AIC_simp <- 2*simp_cop_num_params - 2*(log_lik_simp_train_orig + log_lik_simp_test_orig)
+BIC_simp <- log(nrow(orig_data))*simp_cop_num_params - 2*(log_lik_simp_train_orig + log_lik_simp_test_orig)
+print(p_value_train)
+print(p_value_test)
+print(AIC_NN)
+print(AIC_simp)
+print(BIC_NN)
+print(BIC_simp)
+print(log_lik_NN_train_orig)
+print(log_lik_simp_train_orig)
+print(log_lik_NN_test_orig)
+print(log_lik_simp_test_orig)
+
 # The syntax for loading and using this model is:
 # loaded_model <- load_model_hdf5("models/NN_5d_2025-04-29.keras")
 # # example for predictions, further training or evaluating the loaded model.
