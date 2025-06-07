@@ -254,26 +254,39 @@ run_simulations <- function(num_samples,
                                         n_samples=50000,
                                         user_info=FALSE)
           }
-          # compute log likelihood under the simplified vine copula model and under the new model
-          # on the train and on the test set
-          log_lik_simplified_train <- sum(log(dvinecop(x_train, fitted_vine)))
-          log_lik_NN_train <- sum(log(non_param_cop(
+          # evaluate log likelihoods of original data (on train and test set fractions of orig_data)
+          log_lik_simp_train_orig <- sum(log(dvinecop(x_train[y_train==1,], fitted_vine)))
+          log_lik_NN_train_orig <- sum(log(non_param_cop(
             model=model,
             fitted_vine=fitted_vine,
-            obs=x_train,
+            obs=x_train[y_train==1,],
             nu=nu_var)))
-          log_lik_simplified_test <- sum(log(dvinecop(x_test, fitted_vine)))
-          log_lik_NN_train <- sum(log(non_param_cop(
+          log_lik_simp_test_orig <- sum(log(dvinecop(x_test[y_test==1,], fitted_vine)))
+          log_lik_NN_test_orig <- sum(log(non_param_cop(
             model=model,
             fitted_vine=fitted_vine,
-            obs=x_test,
+            obs=x_test[y_test==1,],
             nu=nu_var)))
+          # get number of model parameters and degrees of freedom for the log likelihood ratio test
           NN_num_params <- count_NN_params(weights=model$weights)
           simp_cop_num_params <- get_num_cop_params(fitted_vine)
+          deg_free <- NN_num_params - simp_cop_num_params
+          # log likelihood ratio test statistic
+          LRT_stat_train <- -2*(as.numeric(log_lik_simp_train_orig) - as.numeric(log_lik_NN_train_orig))
+          LRT_stat_test <- -2*(as.numeric(log_lik_simp_test_orig) - as.numeric(log_lik_NN_test_orig))
+          # compute p(chisq(df=deg_free) > LRT_stat) (for train and test set)
+          p_value_train <- pchisq(LRT_stat_train, df = deg_free, lower.tail = FALSE)
+          p_value_test <- pchisq(LRT_stat_test, df = deg_free, lower.tail = FALSE)
+          # compute AIC and BIC for the NN and simplified model
+          AIC_NN <- 2*NN_num_params - 2* (log_lik_NN_train_orig + log_lik_NN_test_orig)
+          AIC_simp <- 2*simp_cop_num_params - 2*(log_lik_simp_train_orig + log_lik_simp_test_orig)
+          BIC_NN <- log(nrow(orig_data))*NN_num_params - 2* (log_lik_NN_train_orig + log_lik_NN_test_orig)
+          BIC_simp <- log(nrow(orig_data))*simp_cop_num_params - 2*(log_lik_simp_train_orig + log_lik_simp_test_orig)
+          # End likelihood ratio test
           g_vals <- compute_gvals(model, orig_data, nu=nu_var)
           output <- perform_quant_reg(g_vals,
                                       orig_data,
-                                      family_set_name="parametric",
+                                      family_set_name="all",
                                       bottom_quantile_levels=lower_q_levs,
                                       top_quantile_levels = upper_q_levs)
           # Store the results of the current iteration
@@ -288,7 +301,22 @@ run_simulations <- function(num_samples,
                               train_set_eval[[2]],
                               test_set_eval[[1]],
                               test_set_eval[[2]],
-                              int_val
+                              int_val,
+                              log_lik_simp_train_orig,
+                              log_lik_NN_train_orig,
+                              log_lik_simp_test_orig,
+                              log_lik_NN_test_orig,
+                              NN_num_params,
+                              simp_cop_num_params,
+                              deg_free,
+                              LRT_stat_train,
+                              LRT_stat_test,
+                              p_value_train,
+                              p_value_test,
+                              AIC_NN,
+                              AIC_simp,
+                              BIC_NN,
+                              BIC_simp
                               )
           # append to the results list, as a list, to keep the rows separated
           all_results <- append(all_results, list(current_result))
@@ -299,8 +327,8 @@ run_simulations <- function(num_samples,
   # Summarize the results in a dataframe
   results_df <- as.data.frame(do.call(rbind, all_results))
   # Give better names to the columns of the dataframe
-  lower_quantile_names <- paste0("q(", lower_q_levs, ")>0")
-  upper_quantile_names <- paste0("q(", upper_q_levs, ")<0")
+  lower_quantile_names <- paste0("q", lower_q_levs, "geq0")
+  upper_quantile_names <- paste0("q", upper_q_levs, "geq0")
   colnames(results_df) <- c("num_samples",
                             "nu",
                             "dim",
@@ -313,7 +341,22 @@ run_simulations <- function(num_samples,
                             "train set accuracy",
                             "test set loss",
                             "test set accuracy",
-                            "MC Integral")
+                            "MC_Integral",
+                            "log_lik_simp_train_orig",
+                            "log_lik_NN_train_orig",
+                            "log_lik_simp_test_orig",
+                            "log_lik_NN_test_orig",
+                            "NN_num_params",
+                            "simp_cop_num_params",
+                            "deg_free",
+                            "LRT_stat_train",
+                            "LRT_stat_test",
+                            "p_value_train",
+                            "p_value_test",
+                            "AIC_NN",
+                            "AIC_simp",
+                            "BIC_NN",
+                            "BIC_simp")
   if(filename != ""){
     write.csv(results_df, file = filename, row.names = FALSE)
     print(paste("Data saved to:", filename))
@@ -339,9 +382,9 @@ result_df <- run_simulations(
 head(result_df)
 
 # q_levs_lower_for_latex <- c(0.05,0.10,0.15,0.2)
-# q_levs_lower_latex_names <- paste0("q(", q_levs_lower_for_latex, ")>0")
+# q_levs_lower_latex_names <- paste0("q", q_levs_lower_for_latex, "geq0")
 # q_levs_upper_for_latex <- c(0.95,0.9,0.85,0.8)
-# q_levs_upper_latex_names <- paste0("q(", q_levs_upper_for_latex, ")<0")
+# q_levs_upper_latex_names <- paste0("q", q_levs_upper_for_latex, "geq0")
 # cols_for_latex <-c("num_samples",
 #                    "dim",
 #                    "tau_lower",
@@ -350,7 +393,16 @@ head(result_df)
 #                    q_levs_lower_latex_names,
 #                    q_levs_upper_latex_names,
 #                    "train set loss",
-#                    "test set loss")
+#                    "test set loss",
+#                    "AIC_NN",
+#                    "AIC_simp",
+#                    "log_lik_simp_train_orig",
+#                    "log_lik_NN_train_orig",
+#                    "log_lik_simp_test_orig",
+#                    "log_lik_NN_test_orig",
+#                    "NN_num_params",
+#                    "simp_cop_num_params"
+#                    )
 # latex_result_df <- result_df[cols_for_latex]
 # head(latex_result_df)
 # latex_filename <- "results/LatexRelevantFields20250527.csv"
