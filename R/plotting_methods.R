@@ -179,6 +179,121 @@ pairs_copula_data_custom <- function(u_data, max_samples = -1, plot_emp_ktau=FAL
   }
 }
 
+copula_pairs_ggplot <- function(data, uscale = TRUE, method = c("ecdf", "kde1d"), title = NULL) {
+  stopifnot(is.data.frame(data) || is.matrix(data))
+  stopifnot(all(sapply(data, is.numeric)))
+  stopifnot(!anyNA(data))
+  data <- as.data.frame(data)
+  method <- match.arg(method)
+  lapply(c("ggplot2", "gridExtra", "grid", "dplyr"), requireNamespace, quietly = TRUE)
+
+  var_names <- colnames(data)
+  n <- ncol(data)
+  text_size <- 8 / sqrt(n)
+
+  if (uscale) {
+    copula_data <- data
+  } else {
+    # --- Transform to copula scale ---
+    copula_data <- switch(method,
+                          ecdf = as.data.frame(apply(data, 2, function(x) rank(x) / (length(x) + 1))),
+                          kde1d = {
+                            if (!requireNamespace("kde1d", quietly = TRUE)) {
+                              stop("Package 'kde1d' is required for method = 'kde1d'")
+                            }
+                            as.data.frame(data) |>
+                              dplyr::mutate(dplyr::across(dplyr::everything(), ~ {
+                                fit <- kde1d::kde1d(.x)
+                                u <- kde1d::pkde1d(.x, fit)
+                                pmin(pmax(u, 1e-6), 1 - 1e-6)
+                              }))
+                          }
+    )
+  }
+
+  # Gaussian margins
+  gaussian_data <- as.data.frame(lapply(copula_data, qnorm))
+  colnames(gaussian_data) <- var_names
+
+  # --- Diagonal histogram plot ---
+  plot_hist_diag <- function(i) {
+    var_data <- copula_data[[var_names[i]]]
+    hist_data <- hist(var_data, breaks = seq(0, 1, length.out = 31), plot = FALSE)
+    y_max <- max(hist_data$counts) * 1.5
+
+    ggplot2::ggplot(copula_data, ggplot2::aes(x = !!rlang::sym(var_names[i]))) +
+      ggplot2::geom_histogram(breaks = seq(0, 1, length.out = 31),
+                              fill = "grey80", color = "black") +
+      ggplot2::scale_x_continuous(limits = c(0, 1), expand = c(0, 0)) +
+      ggplot2::scale_y_continuous(limits = c(0, y_max), expand = ggplot2::expansion(mult = c(0, 0))) +
+      ggplot2::annotate("text", x = 0.5, y = y_max, label = var_names[i],
+                        hjust = 0.5, vjust = 1, size = text_size) +
+      ggplot2::theme_void()
+  }
+
+  # --- Upper triangle: scatter/hex + tau ---
+  plot_scatter_upper <- function(i, j) {
+    tau <- cor(copula_data[[j]], copula_data[[i]], method = "kendall")
+    ggplot2::ggplot(copula_data, ggplot2::aes(x = !!rlang::sym(var_names[j]), y = !!rlang::sym(var_names[i]))) +
+      ggplot2::geom_hex(alpha = 0.4, bins = 30) +
+      ggplot2::annotate("text", x = 0.05, y = 0.95,
+                        # label = format(round(tau, 2), digits = 2),
+                        label = sprintf("%.2f", tau),
+                        size = text_size, hjust = 0, vjust = 1, color = "red") +
+      ggplot2::theme_void() +
+      ggplot2::theme(legend.position = "none")
+  }
+
+  # --- Lower triangle: contour ---
+  plot_contour_lower <- function(i, j) {
+    x <- gaussian_data[[j]]
+    y <- gaussian_data[[i]]
+    valid <- all(is.finite(x)) && all(is.finite(y)) &&
+      length(unique(x)) > 5 && length(unique(y)) > 5 &&
+      sd(x) > 1e-8 && sd(y) > 1e-8
+
+    if (!valid) {
+      ggplot2::ggplot() +
+        ggplot2::annotate("text", x = 0.5, y = 0.5, label = "No variation",
+                          size = 4, hjust = 0.5) +
+        ggplot2::theme_void()
+    } else {
+      ggplot2::ggplot(data.frame(x = x, y = y), ggplot2::aes(x = x, y = y)) +
+        ggplot2::stat_density_2d(
+          ggplot2::aes(fill = ggplot2::after_stat(level)),
+          geom = "polygon", bins = 5, color = NA
+        ) +
+        ggplot2::scale_fill_viridis_c(option = "D") +
+        ggplot2::theme_void() +
+        ggplot2::theme(legend.position = "none")
+    }
+  }
+
+  # --- Build matrix of plots ---
+  plot_matrix <- vector("list", n * n)
+  for (i in 1:n) {
+    for (j in 1:n) {
+      idx <- (i - 1) * n + j
+      plot_matrix[[idx]] <- if (i == j) {
+        plot_hist_diag(i)
+      } else if (i < j) {
+        plot_scatter_upper(i, j)
+      } else {
+        plot_contour_lower(i, j)
+      }
+    }
+  }
+
+  g_body <- gridExtra::arrangeGrob(grobs = plot_matrix, ncol = n)
+
+  g_final <- if (!is.null(title)) {
+    gridExtra::arrangeGrob(g_body, top = grid::textGrob(title, gp = grid::gpar(fontsize = 14, fontface = "bold")))
+  } else {
+    g_body
+  }
+  grid::grid.draw(g_final)
+}
+
 #' Takes a vector a and returns a function of u (vector of elements between 0 and 1).
 #' That function takes the dot product between a and u, scales that to
 #' T_values and calculates a kendall's tau value using the tanh.
