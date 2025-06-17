@@ -76,6 +76,21 @@ lr_schedule_fun <- function(epoch, lr) {
     return(lr)
   }
 }
+
+# Run Python code to define and register the metric
+reticulate::py_run_string("
+import tensorflow as tf
+from tensorflow import keras
+
+@keras.saving.register_keras_serializable(name='binary_accuracy_from_logits')
+def binary_accuracy_from_logits(y_true, y_pred):
+    y_pred = tf.nn.sigmoid(y_pred)
+    return keras.metrics.binary_accuracy(y_true, y_pred)
+")
+
+# Retrieve the registered Python function into R
+binary_accuracy_from_logits <- reticulate::py$binary_accuracy_from_logits
+
 #' Defines and compiles a neural network for binary classification.
 #' Activation function is leaky_relu, output is one layer with no activation
 #' (to train a binary classifier with from_logits=TRUE option)
@@ -108,16 +123,12 @@ build_model <- function(
       layer_activation_leaky_relu(alpha = leaky_relu_alpha) %>%
       layer_dense(units = 1)
   }
-  # Define binary accuracy metric from logit level
-  custom_accuracy_from_logits <- keras::custom_metric("binary_accuracy_from_logits", function(y_true, y_pred) {
-    y_pred_prob <- keras::k_sigmoid(y_pred)
-    keras::metric_binary_accuracy(y_true, y_pred_prob)
-  })
+
   # compile the model, define optimizer, loss and metrics
   model %>% compile(
     optimizer = keras$optimizers$Adam(learning_rate=initial_lr),
     loss = keras$losses$BinaryCrossentropy(from_logits=TRUE),
-    metrics = list(custom_accuracy_from_logits)
+    metrics = list(binary_accuracy_from_logits)
   )
   return(model)
 }
@@ -288,27 +299,27 @@ compute_gvals <- function(
 }
 
 
-#' performs a quantile regression
+#' performs a D-Vine quantile regression
 #' @param g_vals: Vector. Values g_t from the thesis
 #' @param orig_data: The observed data.
-#' @param family_set_name: Defaults to "onepar".
+#' @param family_set_name: Defaults to "nonparametric".
 #' Argument family_set in the D-vine Quantile regression function.
 #' Possible choices include "onepar" and "parametric".
-#' @param bottom_quantile_levels: Defaults to c(0.05,0.1). Vector of lower quantiles,
+#' @param bottom_quantile_levels: Defaults to seq(0.05,0.25,0.05). Vector of lower quantiles,
 #' for which it is checked, whether the conditioned quantile estimates are >0.
 #' Tests whether the alternative model is better
-#' @param top_quantile_levels: Defaults to c(0.05,0.1). Vector of upper quantiles,
+#' @param top_quantile_levels: Defaults to seq(0.75,0.95,0.05). Vector of upper quantiles,
 #' for which it is checked, whether the conditioned quantile estimates are <0.
 #' Tests whether the simplified model is better
 #' @returns: A List of 2 vectors, the first containing the number of samples, for which
 #' q(bottom_quantile_levels) > 0 holds, the second containing the number of samples, for
 #' which q(top_quantile_levels) < 0 holds.
 perform_quant_reg <- function(
-    g_vals,
     orig_data,
-    family_set_name = "parametric",
-    bottom_quantile_levels = c(0.05,0.1),
-    top_quantile_levels = c(0.9,0.95)){
+    g_vals,
+    family_set_name = "nonparametric",
+    bottom_quantile_levels = seq(0.05,0.25,0.05),
+    top_quantile_levels = seq(0.75,0.95,0.05)){
   orig_data <- data.frame(orig_data)
   qreg_data <- cbind(g_vals, orig_data)
   q_reg <- vinereg::vinereg(g_vals ~ . ,family_set=family_set_name, data=qreg_data)
@@ -331,6 +342,108 @@ perform_quant_reg <- function(
   output <- list(alternative_better,
                  simp_better)
   return(output)
+}
+
+#' performs a linear quantile regression
+#' @param orig_data: matrix or dataframe. The observed data.
+#' @param g_vals: Vector. Values g_t from the thesis
+#' @param bottom_quantile_levels: Defaults to c(0.05,0.1). Vector of lower quantiles,
+#' for which it is checked, whether the conditioned quantile estimates are >0.
+#' Tests whether the alternative model is better
+#' @param top_quantile_levels: Defaults to c(0.05,0.1). Vector of upper quantiles,
+#' for which it is checked, whether the conditioned quantile estimates are <0.
+#' Tests whether the simplified model is better
+#' @returns: A List of 2 vectors, the first containing the number of samples, for which
+#' q(bottom_quantile_levels) > 0 holds, the second containing the number of samples, for
+#' which q(top_quantile_levels) < 0 holds.
+perform_linear_quant_reg <- function(orig_data,
+                                     g_vals,
+                                     bottom_quantiles_lin=seq(0.05,0.25,0.05),
+                                     top_quantiles_lin=seq(0.75,0.95,0.05),
+                                     method="br"){
+  linear_qreg_dataframe <- as.data.frame(orig_data)
+  all_quantiles <- c(bottom_quantiles_lin, top_quantiles_lin)
+  fit_linear_model <- quantreg::rq(g_vals ~ .,
+                         data=linear_qreg_dataframe,
+                         tau=all_quantiles)
+  preds_lin <- predict(fit_linear_model,
+                       newdata = linear_qreg_dataframe)
+  alternative_better_lin <- rep(0, length(bottom_quantiles_lin))
+  simp_better_lin <- rep(0, length(top_quantiles_lin))
+  for(i in 1:nrow(orig_data)){
+    for(j in 1:length(bottom_quantiles_lin)){
+      if(preds_lin[i,j] > 0){
+        alternative_better_lin[j] <- alternative_better_lin[j] + 1
+      }
+    }
+    for(j in 1:length(top_quantiles_lin)){
+      if(preds_lin[i,(j+length(bottom_quantiles_lin))] < 0){
+        simp_better_lin[j] <- simp_better_lin[j] + 1
+      }
+    }
+  }
+  return(list(alternative_better_lin, simp_better_lin))
+}
+
+#' performs a Neural Network quantile regression (MCQRNN)
+#' @param orig_data: matrix or dataframe. The observed data.
+#' @param g_vals: Vector. Values g_t from the thesis
+#' @param bottom_quantile_levels: Defaults to c(0.05,0.1). Vector of lower quantiles,
+#' for which it is checked, whether the conditioned quantile estimates are >0.
+#' Tests whether the alternative model is better
+#' @param top_quantile_levels: Defaults to c(0.05,0.1). Vector of upper quantiles,
+#' for which it is checked, whether the conditioned quantile estimates are <0.
+#' Tests whether the simplified model is better
+#' @param num.hidden: int, defaults to 10. Number of hidden units in the
+#' single hidden layer of the NN
+#' @param num_trials: int, defaults to 1. Number of repeated fitting procedures
+#' (To try and avoid local minima)
+#' @param penalty: float, defaults to 0.1. Parameter for weight decay regularization
+#' @param max_iter: int, defaults to 500. Maximum number of iterations of the
+#' optimization algorithm
+#' @param user_info: Boolean, defaults to FALSE. If True, diagnostic messages are
+#' printed during optimization
+#' @returns: A List of 2 vectors, the first containing the number of samples, for which
+#' q(bottom_quantile_levels) > 0 holds, the second containing the number of samples, for
+#' which q(top_quantile_levels) < 0 holds.
+perform_quant_reg_mcqrnn <- function(orig_data,
+                                     g_vals,
+                                     bottom_quantiles_NN=seq(0.05,0.25,0.05),
+                                     top_quantiles_NN=seq(0.75,0.95,0.05),
+                                     num_hidden = 10,
+                                     num_trials=1,
+                                     penalty=0.1,
+                                     max_iter=500,
+                                     activation = qrnn::sigmoid,
+                                     user_info=FALSE){
+  quantiles_NN <- c(bottom_quantiles_NN, top_quantiles_NN)
+  x_qrnn <- as.matrix(orig_data)
+  y_qrnn <- matrix(g_vals,ncol=1)
+  fitted_mcqrnn <- qrnn::mcqrnn.fit(x=x_qrnn,
+                              y=y_qrnn,
+                              tau=quantiles_NN,
+                              n.hidden=num_hidden,
+                              n.trials=num_trials,
+                              penalty=penalty,
+                              Th=activation,
+                              iter.max=max_iter,
+                              trace=user_info)
+  qrnn_preds <- qrnn::mcqrnn.predict(orig_data, fitted_mcqrnn)
+  alternative_better_qrnn <- rep(0, length(bottom_quantiles_NN))
+  simp_better_qrnn <- rep(0, length(top_quantiles_NN))
+  for(i in 1:nrow(orig_data)){
+    for(j in 1:length(bottom_quantiles_NN)){
+      if(qrnn_preds[i,j] > 0){
+        alternative_better_qrnn[j] <- alternative_better_qrnn[j] + 1
+      }
+    }
+    for(j in 1:length(top_quantiles_NN)){
+      if(qrnn_preds[i,(j+length(bottom_quantiles_NN))] < 0){
+        simp_better_qrnn[j] <- simp_better_qrnn[j] + 1
+      }
+    }
+  }
+  return(list(alternative_better_qrnn, simp_better_qrnn))
 }
 
 
