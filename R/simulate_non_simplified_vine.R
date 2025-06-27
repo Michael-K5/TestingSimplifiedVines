@@ -522,3 +522,224 @@ simulate_non_simp_parallel <- function(n_samples = 500,
   result <- permute_back(u, inverse_permutation)
   return(result)
 }
+
+#' From data coming from an rvine structure with elements current_order on the top right to
+#' bottom left of the antidiagonal, this function returns the samples of the permuted structure,
+#' where the elements on the antidiagonal are ordered increasingly from top right to bottom left.
+#' @param samples: Matrix with ncol(simulations) = length(current_order)
+#' The given data.
+#' @param current_order: The elements on the antidiagonal from bottom left to top right
+#' in the original structure
+#' @returns result: the data permuted to fit an order, that is increasing from the top
+#' right to the bottom left of the r vine structure matrix.
+permute_forward <- function(samples, current_order){
+  result = samples[,1:ncol(samples)]
+  for (i in 1:ncol(samples)){
+    result[,i] <- samples[,current_order[i]]
+  }
+  return(result)
+}
+
+#' Evaluates the likelihood of a single sample,
+#' @param u Single sample (on copula scale)
+#' @param new_struct rvine structure, where the antidiagonal is ordered
+#' increasingly from top right to bottom left.
+#' @param M_mat the matrix tilde(M), with tilde(m)_k,i = max_{j=1}^{k}{new_struct_{j,i}}
+#' @param families copula families, formatted as a list of lists
+#' @param params parameters for the first tree, formatted as a list (of vectors)
+#' @param param_cond_funcs list of list of functions that maps the u values, which the respective
+#' copula is conditioned on, and a copula family-name to a parameter for that copula
+#' @param rotations rotations of the copulas, formatted as a list of lists.
+#' @returns L: Log-Likelihood of the datapoint
+log_likelihood_single_sample <- function(
+    u_row,
+    new_struct,
+    M_mat,
+    families,
+    params,
+    param_cond_funcs,
+    rotations
+    ){
+  d <- ncol(new_struct)
+  L <- 0
+  # storage for the matrices V and V^2
+  V <- matrix(rep(0,d^2), ncol=d)
+  V_2 <- matrix(rep(0,d^2), ncol=d)
+  for(i in 1:d){
+    V[1,i] <- u_row[d-i+1]
+  }
+  # loop through the columns from right to left
+  for (i in (d-1):1){
+    # loop through the rows from the antidiagonal upwards
+    for (k in 1:(d-i)){
+      # In this iteration, we condition on m_{1,i},...,m_{k-1,i}
+      # So for a non-simplified vine, the parameters can depend on
+      # u_{m_{1,i}},..., u_{m_{k-1,i}}. These are already known at this point,
+      # and they are stored in V_{1,{d-m_{1,i}+1}},...,V_{1,{d-m_{k-1,i}+1}}
+      param <- params[[i]]
+      if (k>1){
+        cond_u_vals <- rep(0,k-1)
+        for (temp in 1:(k-1)){
+          cond_u_vals[temp] <- V[1,d-new_struct[temp,i]+1]
+        }
+        param <- param_cond_funcs[[k-1]][[i]](cond_u_vals, family=families[[k]][[i]])
+      }
+      cop <- bicop_dist(family=families[[k]][[i]],
+                        rotation=rotations[[k]][[i]],
+                        parameters = param)
+      z_1 <- V[k,i]
+      z_2 <- 0
+      if(new_struct[k,i] == M_mat[k,i]){
+        z_2 <- V[k,d-M_mat[k,i]+1]
+      } else {
+        z_2 <- V_2[k,d-M_mat[k,i]+1]
+      }
+      # z_1 = C_{d-i+1|m_{1,i},...,m_{k-1,i}}(...),
+      # z_2 = C_{m_{k,i}|m_{1,i},...,m_{k-1,i}}(...),
+      # so first z_2 then z_1 is the right order in the following copula,
+      # since k <= d-i < d-i+1
+      L <- L + log(dbicop(c(z_2,z_1) ,cop))
+      V[k+1,i] = hbicop(c(z_1,z_2),cop,cond_var = 2, inverse=FALSE)
+      V_2[k+1,i] <- hbicop(c(z_1,z_2), cop, cond_var=1, inverse=FALSE)
+    }
+  }
+  return(L)
+}
+
+
+#' Calculate likelihood
+#' @param u_data matrix of datapoints. Each row should by one datapoint, for which
+#' a likelihood should be evaluated
+#' @param struct rvine-structure matrix
+#' @param families copula families, formatted as a list of lists
+#' @param params parameters for the first tree, formatted as a list (of vectors)
+#' @param param_cond_funcs list of list of functions that maps the u values, which the respective
+#' copula is conditioned on, and a copula family-name to a parameter for that copula
+#' @param rotations rotations of the copulas, formatted as a list of lists.
+#' @param return_vector: Boolean, defaults to FALSE. If TRUE, for every row
+#' in u_data the function returns the likelihood for that row, i.e. returns a vector. Otherwise
+#' it returns a single number (the sum of the individual log likelihoods)
+#' @returns L: if return_vector is TRUE a vector, otherwise a number.
+#' The log likelihoods of the individual samples, or of the whole dataset
+log_likelihood_non_simplified <- function(u_data =matrix(c(0.2,0.3,0.4,
+                                                    0.5,0.5,0.5),ncol=3, byrow=TRUE),
+                                    struct = matrix(c(1,1,1,
+                                                      2,2,0,
+                                                      3,0,0)
+                                                    ,byrow=TRUE, ncol=3),
+                                    families=list(list("gumbel", "gumbel"), list("gumbel")),
+                                    params = list(c(2), c(1.3)),
+                                    param_cond_funcs = list(list(u_to_param)),
+                                    rotations = list(list(0,0),list(0)),
+                                    return_vector=FALSE){
+  # Reorder the indices, so they have the numbers 1 to d from top right to bottom left on the antidiagonal
+  temp <- permute_indices(struct)
+  new_struct <- temp[[1]]
+  current_order <- temp[[3]]
+  u_data_ordered <- permute_forward(samples=u_data, current_order=current_order)
+  # Compute the matrix \tilde(M), with \tilde(M)_{k,i} = max(new_struct_{1,i},...,new_struct_{k,i})
+  M_mat <- get_max_matrix(new_struct)
+  # save log likelihood
+  L <-0
+  if(return_vector){
+    L <- rep(0, nrow(u_data_ordered))
+  }
+  # loop once for every sample
+  prog_bar <- txtProgressBar(min=0,max=nrow(u_data_ordered),title="Evaluating...", style=3)
+  for (row_idx in 1:nrow(u_data_ordered)){
+    log_lik_current_sample <- log_likelihood_single_sample(
+      u_row= u_data_ordered[row_idx,],
+      new_struct = new_struct,
+      M_mat = M_mat,
+      families = families,
+      params = params,
+      param_cond_funcs = param_cond_funcs,
+      rotations = rotations
+    )
+    setTxtProgressBar(prog_bar, value=row_idx, title="Evaluating...")
+    if(return_vector){
+      L[row_idx] <- log_lik_current_sample
+    } else {
+      L <- L + log_lik_current_sample
+    }
+  }
+  return(L)
+}
+
+
+#' parallel evaluation of log likelihood data
+#' @param u_data matrix of datapoints. Each row should by one datapoint, for which
+#' a likelihood should be evaluated
+#' @param struct rvine-structure matrix
+#' @param families copula families, formatted as a list of lists
+#' @param params parameters for the first tree, formatted as a list (of vectors)
+#' @param param_cond_funcs list of list of functions that maps the u values, which the respective
+#' copula is conditioned on, and a copula family-name to a parameter for that copula
+#' @param rotations rotations of the copulas, formatted as a list of lists.
+#' @param return_vector: Boolean, defaults to FALSE. If TRUE, for every row
+#' in u_data the function returns the likelihood for that row, i.e. returns a vector. Otherwise
+#' it returns a single number (the sum of the individual log likelihoods)
+#' @returns L: if return_vector is TRUE a vector, otherwise a number.
+#' The log likelihoods of the individual samples, or of the whole dataset
+log_likelihood_non_simp_parallel <- function(u_data = matrix(c(0.2,0.3,0.4,
+                                                               0.5,0.5,0.5),ncol=3, byrow=TRUE),
+                                       struct = matrix(c(1,1,1,
+                                                         2,2,0,
+                                                         3,0,0)
+                                                       ,byrow=TRUE, ncol=3),
+                                       families=list(list("gumbel", "gumbel"), list("gumbel")),
+                                       params = list(c(2), c(1.3)),
+                                       param_cond_funcs = list(list(u_to_param)),
+                                       rotations = list(list(0,0),list(0)),
+                                       return_vector=FALSE){
+  # Reorder the indices, so they have the numbers 1 to d from top right to bottom left on the antidiagonal
+  temp <- permute_indices(struct)
+  new_struct <- temp[[1]]
+  current_order <- temp[[3]]
+  u_data_ordered <- permute_forward(samples=u_data, current_order=current_order)
+  # Compute the matrix \tilde(M), with \tilde(M)_{k,i} = max(new_struct_{1,i},...,new_struct_{k,i})
+  M_mat <- get_max_matrix(new_struct)
+  # save log likelihood
+  L <-0
+  if(return_vector){
+    L <- rep(0, nrow(u_data_ordered))
+  }
+  # parallel computing
+  cl <- parallel::makeCluster(parallel::detectCores() - 1)
+  # export the required functions for parallel processing
+  parallel::clusterExport(cl,
+                          varlist = c("log_likelihood_single_sample",
+                                      "u_to_param",
+                                      "bicop_dist",
+                                      "hbicop",
+                                      "ktau_to_par",
+                                      "fisher_z_transform",
+                                      "inverse_fisher_transform",
+                                      "scaled_tanh",
+                                      "struct",
+                                      "families",
+                                      "params",
+                                      "param_cond_funcs",
+                                      "rotations"),
+                          envir=environment())
+  # pblapply to display a progress bar
+  output_list <- pbapply::pblapply(1:nrow(u_data_ordered), function(i) {
+    log_likelihood_single_sample(
+      u_row=u_data_ordered[i,],
+      new_struct= new_struct,
+      M_mat=M_mat,
+      families = families,
+      params = params,
+      param_cond_funcs = param_cond_funcs,
+      rotations = rotations
+      )
+  }, cl=cl)
+  # stop the cluster, to free resources on computer
+  parallel::stopCluster(cl)
+  if(return_vector){
+    return(unlist(output_list))
+  }
+  L <- do.call(sum, output_list)
+  return(L)
+}
+
