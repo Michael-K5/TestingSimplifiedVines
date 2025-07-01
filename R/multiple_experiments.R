@@ -10,9 +10,6 @@ nus <- list(10,4)
 dims <- list(3,4,5)
 # each list element contains first the lower, then the upper limit
 tau_limits <- list(c(0.001,0.3), c(0.001,0.6), c(0.001,0.9))
-# Quantile Levels to calculate:
-lower_q_levs <- seq(0.01,0.30,0.01)
-upper_q_levs <- seq(0.70,0.99,0.01)
 
 # Define 3d parameters
 struct_mat_3d <- matrix(c(1,1,1,
@@ -50,10 +47,10 @@ params_5d <- list(c(ktau_to_par(family=families_5d[[1]][[1]], tau=0.2)),
                   c(ktau_to_par(family=families_5d[[1]][[4]], tau=0.1)))
 rotations_5d <- list(list(0,0,0,0),list(0,0,0), list(0,0), list(0))
 # Summarize parameters by dimension
-struct_mats <- list(struct_mat_3d, struct_mat_4d, struct_mat_5d)
-families <- list(families_3d, families_4d, families_5d)
-initial_params <- list(params_3d, params_4d, params_5d)
-rotations <- list(rotations_3d, rotations_4d, rotations_5d)
+# struct_mats <- list(struct_mat_3d, struct_mat_4d, struct_mat_5d)
+# families <- list(families_3d, families_4d, families_5d)
+# initial_params <- list(params_3d, params_4d, params_5d)
+# rotations <- list(rotations_3d, rotations_4d, rotations_5d)
 
 #struct_mats <- list(struct_mat_4d)
 #families <- list(families_4d)
@@ -80,10 +77,16 @@ rotations <- list(rotations_3d, rotations_4d, rotations_5d)
 #' for the i-th unconditioned copula in the first tree, defined by struct_mats[[i]]
 #' @param rotations: List of (list of list of int): The i-th element contains the
 #' rotations of the copulas specified in struct_mats[[i]]
-#' @param int_dev_threshold: Float, defaults to 0.5: If the monte carlo integral of the
-#' non-parametric model deviates by more than int_dev_threshold from 1 (which should be the
-#' integral of a density), then the same combination of parametrers
-#' is run again max_retries times, to try to find a more appropriate model.
+#' @param lower_q_levs: Vector of float: defaults to seq(0.01,0.25,0.01). The lower
+#' quantiles that should be estimated in the quantile regression
+#' @param upper_q_levs: Vector of float: defaults to seq(0.75,0.99,0.01). The upper
+#' quantiles that should be estimated in the quantile regression
+#' @param int_bottom_threshold: Float, defaults to 0.6: If the monte carlo integral of the
+#' non-parametric model is less than int_bottom_threshold, then the same combination of parameters
+#' is run again (at most max_retries times), to try to find a more appropriate model.
+#' @param int_top_threshold: Float, defaults to 1.8: If the monte carlo integral of the
+#' non-parametric model is greater than int_top_threshold, then the same combination of parameters
+#' is run again (at most max_retries times), to try to find a more appropriate model.
 #' @param max_retries: Integer, defaults to 3: How often to retry evaluating the model if
 #' the monte carlo integral value is not close enough to 1 (as measured by int_dev_threshold)
 #' @param filename: string, defaults to "": If not "", then the results are written to
@@ -97,7 +100,10 @@ run_simulations <- function(num_samples,
                             families,
                             initial_params,
                             rotations,
-                            int_dev_threshold = 0.5,
+                            lower_q_levs = seq(0.01,0.25,0.01),
+                            upper_q_levs = seq(0.75,0.99,0.01),
+                            int_bottom_threshold = 0.6,
+                            int_top_threshold = 1.9,
                             max_retries = 3,
                             filename=""){
   # Run big simulation
@@ -213,7 +219,7 @@ run_simulations <- function(num_samples,
                        total_runs,
                        " of a total of ",
                        length(dims)*length(num_samples)*length(tau_limits)*length(param_cond_func_var)))
-          non_simp_data <- simulate_non_simp_parallel(n_samples = num_samples[[sample_idx]],
+          non_simp_data <- simulate_non_simplified(n_samples = num_samples[[sample_idx]],
                                                       struct = struct_mat_var,
                                                       families=families_var,
                                                       params = params_var,
@@ -234,13 +240,15 @@ run_simulations <- function(num_samples,
           x_test <- split_output[[2]]
           y_train <- split_output[[3]]
           y_test <- split_output[[4]]
-          int_val <- -1
+          int_val <- int_bottom_threshold - 1
           retry_num <- 0
+          model <- 0
+          train_set_eval <- -1
+          test_set_eval <- -1
           # Loop to discard a certain value, if the integral deviates too much from 1
-          while(abs(int_val - 1) > int_dev_threshold && retry_num < max_retries){
-            retry_num = retry_num +1
-            # delete model from previous iteration
-            model <- 0
+          while((int_val < int_bottom_threshold || int_val > int_top_threshold)
+                && retry_num < max_retries){
+            retry_num <- retry_num +1
             # define new model
             model <- build_model(input_dim=ncol(x_train), use_tanh=FALSE)
             train_model_output <- train_model(model, x_train, y_train, num_epochs=200)
@@ -278,25 +286,42 @@ run_simulations <- function(num_samples,
           p_value_train <- pchisq(LRT_stat_train, df = deg_free, lower.tail = FALSE)
           p_value_test <- pchisq(LRT_stat_test, df = deg_free, lower.tail = FALSE)
           # compute AIC and BIC for the NN and simplified model
-          AIC_NN <- 2*NN_num_params - 2* (log_lik_NN_train_orig + log_lik_NN_test_orig)
+          AIC_NN <- 2*(NN_num_params + simp_cop_num_params) - 2* (log_lik_NN_train_orig + log_lik_NN_test_orig)
           AIC_simp <- 2*simp_cop_num_params - 2*(log_lik_simp_train_orig + log_lik_simp_test_orig)
-          BIC_NN <- log(nrow(orig_data))*NN_num_params - 2* (log_lik_NN_train_orig + log_lik_NN_test_orig)
+          BIC_NN <- log(nrow(orig_data))*(NN_num_params + simp_cop_num_params) - 2* (log_lik_NN_train_orig + log_lik_NN_test_orig)
           BIC_simp <- log(nrow(orig_data))*simp_cop_num_params - 2*(log_lik_simp_train_orig + log_lik_simp_test_orig)
           # End likelihood ratio test
+          # Perform D-Vine Quantile regression (parametric)
           g_vals <- compute_gvals(model, orig_data, nu=nu_var)
-          output <- perform_quant_reg(g_vals,
-                                      orig_data,
-                                      family_set_name="all",
+          qreg_par_output <- perform_quant_reg(orig_data,
+                                      g_vals,
+                                      family_set_name="onepar",
                                       bottom_quantile_levels=lower_q_levs,
                                       top_quantile_levels = upper_q_levs)
+          # Perform D-Vine Quantile regression (non-parametric)
+          qreg_nonpar_output <- perform_quant_reg(orig_data,
+                                      g_vals,
+                                      family_set_name="nonparametric",
+                                      bottom_quantile_levels=lower_q_levs,
+                                      top_quantile_levels = upper_q_levs)
+          # Linear Quantile Regression
+          lin_qreg_output <- perform_linear_quant_reg(
+            orig_data,
+            g_vals,
+            bottom_quantiles_lin =lower_q_levs,
+            top_quantiles_lin =upper_q_levs)
           # Store the results of the current iteration
           current_result <- c(num_samples[[sample_idx]],
                               nus[[sample_idx]],
                               dims[[dim_idx]],
                               tau_limits[[tau_idx]],
                               par_idx,
-                              output[[1]],
-                              output[[2]],
+                              qreg_par_output[[1]],
+                              qreg_par_output[[2]],
+                              qreg_nonpar_output[[1]],
+                              qreg_nonpar_output[[2]],
+                              lin_qreg_output[[1]],
+                              lin_qreg_output[[2]],
                               train_set_eval[[1]],
                               train_set_eval[[2]],
                               test_set_eval[[1]],
@@ -326,17 +351,27 @@ run_simulations <- function(num_samples,
   }
   # Summarize the results in a dataframe
   results_df <- as.data.frame(do.call(rbind, all_results))
-  # Give better names to the columns of the dataframe
-  lower_quantile_names <- paste0("q", lower_q_levs, "geq0")
-  upper_quantile_names <- paste0("q", upper_q_levs, "geq0")
+  # Give better names to the parametric quantile columns of the dataframe
+  lower_quantile_par_names <- paste0("onepar-q", lower_q_levs, "geq0")
+  upper_quantile_par_names <- paste0("onepar-q", upper_q_levs, "leq0")
+  # Give better names to the nonparametric quantile columns of the dataframe
+  lower_quantile_nonpar_names <- paste0("nonpar-q", lower_q_levs, "geq0")
+  upper_quantile_nonpar_names <- paste0("nonpar-q", upper_q_levs, "leq0")
+  # Give better names to the linear quantile columns of the dataframe
+  lower_quantile_lin_names <- paste0("lin-q", lower_q_levs, "geq0")
+  upper_quantile_lin_names <- paste0("lin-q", upper_q_levs, "leq0")
   colnames(results_df) <- c("num_samples",
                             "nu",
                             "dim",
                             "tau_lower",
                             "tau_upper",
                             "param_cond_func_idx",
-                            lower_quantile_names,
-                            upper_quantile_names,
+                            lower_quantile_par_names,
+                            upper_quantile_par_names,
+                            lower_quantile_nonpar_names,
+                            upper_quantile_nonpar_names,
+                            lower_quantile_lin_names,
+                            upper_quantile_lin_names,
                             "train set loss",
                             "train set accuracy",
                             "test set loss",
@@ -364,23 +399,284 @@ run_simulations <- function(num_samples,
   return(results_df)
 }
 # Run big simulation
-# Get the current date in YYYY-MM-DD format
-current_date <- Sys.Date()
-# Construct the file name with the date
-results_filename <- paste0("results/", current_date, ".csv")
-result_df <- run_simulations(
-  num_samples=num_samples,
-  dims=dims,
-  nus=nus,
-  tau_limits=tau_limits,
-  struct_mats=struct_mats,
-  families=families,
-  initial_params=initial_params,
-  rotations=rotations,
-  filename=results_filename
-  )
-head(result_df)
+# 2 different number of samples.
+num_samples <- list(1000)
+# fraction of number of noise to true samples. Higher, if only 1000 samples given.
+nus <- list(10)
+# dimensions of the simulated data.
+dims <- list(3,5)
+num_replications <- 10
+struct_mats <- list(struct_mat_3d, struct_mat_5d)
+families <- list(families_3d, families_5d)
+initial_params <- list(params_3d, params_5d)
+rotations <- list(rotations_3d, rotations_5d)
 
+for(i in 1:num_replications){
+  print(paste0("Replication ", i, " of ", num_replications))
+  replication_name <- paste0("Repl",i)
+  # Current data (Alternative: Use Sys.Date())
+  current_date <- "20250623OnePar"
+  # Construct the file name with the date
+  num_samples_filename <- paste0(unlist(num_samples), collapse = ",")
+  results_filename <- paste0("results/",
+                             current_date,
+                             "NSamples",
+                             num_samples_filename,
+                             replication_name,
+                             ".csv")
+  result_df <- run_simulations(
+    num_samples=num_samples,
+    dims=dims,
+    nus=nus,
+    tau_limits=tau_limits,
+    struct_mats=struct_mats,
+    families=families,
+    initial_params=initial_params,
+    rotations=rotations,
+    filename=results_filename
+  )
+}
+
+
+# # Plot Pairs copula data
+# source("R/plotting_methods.R")
+# #' plot pairs copula data
+# #' @param num_samples: list of integers, that determine for what different
+# #' number of samples drawn from a non-simplified vine copula the experiments should be run.
+# #' @param dims: list of integers, that determine for what dimensions to run the tests
+# #' (currently implemented for 3, 4 and 5)
+# #' @param tau_limits: list of 2 dimensional vectors: For each of those vectors,
+# #' the first entry determines, what the lower threshold of kendalls tau is,
+# #' the second entry determines what the upper threshold of kendalls tau is in the
+# #' conditional copulas
+# #' @param struct_mats: List of regular vine matrices: Determine what structure to use.
+# #' The entry in position i needs to have the same dimension as dims[[i]].
+# #' @param families: List of (list of list of string): The i-th element
+# #' contains the copula families corresponding to the copulas defined with struct_mats[[i]]
+# #' @param initial_params: List of vectors: The i-th entry contains the parameters
+# #' for the i-th unconditioned copula in the first tree, defined by struct_mats[[i]]
+# #' @param rotations: List of (list of list of int): The i-th element contains the
+# #' rotations of the copulas specified in struct_mats[[i]]
+# #' @returns result_df: A Dataframe with the results of the experiments.
+# plot_data <- function(num_samples,
+#                             dims,
+#                             tau_limits,
+#                             struct_mats,
+#                             families,
+#                             initial_params,
+#                             rotations
+#                             ){
+#   # Run big simulation
+#   total_runs <- 0
+#   # Initialize an empty list to store the results of each inner loop iteration
+#   all_plots <- list()
+#   for(sample_idx in 1:length(num_samples)){
+#     # Check, if any of the dimensions are not implemented. If so stop execution and print.
+#     incorrect_dimensions <- setdiff(unlist(dims), c(3,4,5))
+#     if (length(incorrect_dimensions) > 0) {
+#       print("The following dimensions are not implemented: ")
+#       print(incorrect_dimensions)
+#       print("Please remove these dimensions, then try to execute this function again.")
+#       break
+#     }
+#     for(tau_idx in 1:length(tau_limits)){
+#       tau_lower=tau_limits[[tau_idx]][1]
+#       tau_upper=tau_limits[[tau_idx]][2]
+#       for(dim_idx in 1:length(dims)){
+#         # initialize param_cond_funcs (overwritten below)
+#         param_cond_func_var <- -1
+#         # Define the conditional parameter functions
+#         if(dims[[dim_idx]] ==3){
+#           param_cond_func_3d_lin <- list(
+#             list(u_to_param_linear(c(1), tau_lower=tau_lower, tau_upper=tau_upper)))
+#           param_cond_func_3d_non_lin <- list(
+#             list(u_to_param_quadratic(c(1,1),
+#                                       tau_lower=tau_lower, tau_upper=tau_upper)))
+#           param_cond_func_3d_non_lin_cubic <- list(
+#             list(u_to_param_cubic(c(1,1.2,0.5),
+#                                   tau_lower=tau_lower, tau_upper=tau_upper)))
+#           param_cond_func_var <- list(
+#             param_cond_func_3d_lin,
+#             param_cond_func_3d_non_lin,
+#             param_cond_func_3d_non_lin_cubic)
+#         } else if(dims[[dim_idx]] ==4){
+#           param_cond_funcs_4d_lin <- list(
+#             list(u_to_param_linear(c(1), tau_lower=tau_lower, tau_upper=tau_upper),
+#                  u_to_param_linear(c(1), tau_lower=tau_lower, tau_upper=tau_upper)),
+#             list(u_to_param_linear(c(0.4,0.6), tau_lower=tau_lower, tau_upper=tau_upper)))
+#           param_cond_funcs_4d_non_lin <- list(
+#             list(
+#               u_to_param_quadratic(c(1,1.4),
+#                                    tau_lower=tau_lower, tau_upper=tau_upper),
+#               u_to_param_quadratic(c(1.2,0.9),
+#                                    tau_lower=tau_lower, tau_upper=tau_upper)),
+#             list(
+#               u_to_param_quadratic(c(-0.7,1.5,0.9,-1.2,1.5),
+#                                    tau_lower=tau_lower, tau_upper=tau_upper)))
+#           param_cond_funcs_4d_non_lin_cubic <- list(
+#             list(u_to_param_cubic(c(0.7,1.2,-0.8),
+#                                   tau_lower=tau_lower, tau_upper=tau_upper),
+#                  u_to_param_cubic(c(1.4,-1.8,1.0),
+#                                   tau_lower=tau_lower, tau_upper=tau_upper)),
+#             list(u_to_param_cubic(c(0.7,1.8, -0.9,1.4,0.8,1.1,-1.2,-1.3,1.7),
+#                                   tau_lower=tau_lower, tau_upper=tau_upper)))
+#           param_cond_func_var <- list(
+#             param_cond_funcs_4d_lin,
+#             param_cond_funcs_4d_non_lin,
+#             param_cond_funcs_4d_non_lin_cubic)
+#         } else if(dims[[dim_idx]] ==5){
+#           param_cond_funcs_5d_lin <- list(
+#             list(u_to_param_linear(c(1), tau_lower=tau_lower, tau_upper=tau_upper),
+#                  u_to_param_linear(c(1), tau_lower=tau_lower, tau_upper=tau_upper),
+#                  u_to_param_linear(c(1), tau_lower=tau_lower, tau_upper=tau_upper)),
+#             list(u_to_param_linear(c(0.7,0.3), tau_lower=tau_lower, tau_upper=tau_upper),
+#                  u_to_param_linear(c(0.4,0.6), tau_lower=tau_lower, tau_upper=tau_upper)),
+#             list(u_to_param_linear(c(0.2,0.5,0.3), tau_lower=tau_lower, tau_upper=tau_upper)))
+#           param_cond_funcs_5d_non_lin <- list(
+#             list(
+#               u_to_param_quadratic(c(1,1),
+#                                    tau_lower=tau_lower, tau_upper=tau_upper),
+#               u_to_param_quadratic(c(1,0.7),
+#                                    tau_lower=tau_lower, tau_upper=tau_upper),
+#               u_to_param_quadratic(c(1,2),
+#                                    tau_lower=tau_lower, tau_upper=tau_upper)),
+#             list(u_to_param_quadratic(c(0.7,0.5, 0.9,-1.2,1.5),
+#                                       tau_lower=tau_lower, tau_upper=tau_upper),
+#                  u_to_param_quadratic(c(0.4,-0.8,1.0,0.7,2.0),
+#                                       tau_lower=tau_lower, tau_upper=tau_upper)),
+#             list(u_to_param_quadratic(c(0.7,0.4,-0.9,1.3,0.75,1.3,-0.6,0.5,-1.1),
+#                                       tau_lower=tau_lower, tau_upper=tau_upper)))
+#           param_cond_funcs_5d_non_lin_cubic <- list(
+#             list(u_to_param_cubic(c(1.0,1.0,0.5),
+#                                   tau_lower=tau_lower, tau_upper=tau_upper),
+#                  u_to_param_cubic(c(1.0,0.7,0.3),
+#                                   tau_lower=tau_lower, tau_upper=tau_upper),
+#                  u_to_param_cubic(c(1.0,2.0,1.1),
+#                                   tau_lower=tau_lower, tau_upper=tau_upper)),
+#             list(u_to_param_cubic(c(0.7,0.8, -0.9,0.4,0.8,1.1,-1.2,-1.3,1.0),
+#                                   tau_lower=tau_lower, tau_upper=tau_upper),
+#                  u_to_param_cubic(c(0.4,0.6,1,0.7,2, -1.1,1.2,-0.9,-0.3),
+#                                   tau_lower=tau_lower, tau_upper=tau_upper)),
+#             list(u_to_param_cubic(c(0.7, 0.5, -1.3,
+#                                     1,   1.4, 1  ,-1.4,0.7,-0.8,
+#                                     1.1,-1.4,0.7,-0.3,0.4,
+#                                     0.8, -0.7,1.4,-1.2,-0.6),
+#                                   tau_lower=tau_lower, tau_upper=tau_upper)))
+#           param_cond_func_var <- list(
+#             param_cond_funcs_5d_lin,
+#             param_cond_funcs_5d_non_lin,
+#             param_cond_funcs_5d_non_lin_cubic)
+#         }
+#         # Define the other necessary parameters for simulation
+#         struct_mat_var <- struct_mats[[dim_idx]]
+#         families_var <- families[[dim_idx]]
+#         params_var <- initial_params[[dim_idx]]
+#         rotations_var <- rotations[[dim_idx]]
+#         for(par_idx in 1:length(param_cond_func_var)){
+#           total_runs <- total_runs+1
+#           print(paste0("Executing... ",
+#                        total_runs,
+#                        " of a total of ",
+#                        length(dims)*length(num_samples)*length(tau_limits)*length(param_cond_func_var)))
+#           non_simp_data <- simulate_non_simplified(n_samples = num_samples[[sample_idx]],
+#                                                       struct = struct_mat_var,
+#                                                       families=families_var,
+#                                                       params = params_var,
+#                                                       param_cond_funcs = param_cond_func_var[[par_idx]],
+#                                                       rotations = rotations_var)
+#           orig_data <- as.matrix(non_simp_data)
+#           orig_data <- unname(orig_data)
+#           param_cond_func_name <- "linear"
+#           if(par_idx == 2){
+#             param_cond_func_name <- "quadratic"
+#           } else if (par_idx ==3){
+#             param_cond_func_name <- "cubic"
+#           }
+#           all_plots[[length(all_plots)+1]] <- ggplotify::as.ggplot(
+#             copula_pairs_ggplot(orig_data, title=paste0(param_cond_func_name, " tau_max= ", tau_upper))
+#           )
+#         }
+#       }
+#     }
+#   }
+#
+#   return(all_plots)
+# }
+# # PAIRS COPULA PLOT
+# n_samples_plot <- list(10000)
+#
+# # dimensions of the simulated data.
+# dims <- list(3)
+# # each list element contains first the lower, then the upper limit
+# tau_limits <- list(c(0.001,0.3), c(0.001,0.6), c(0.001,0.9))
+# # Define 3d parameters
+# struct_mat_3d <- matrix(c(1,1,1,
+#                           2,2,0,
+#                           3,0,0), ncol=3, byrow=TRUE)
+# families_3d <- list(list("frank", "gaussian"), list("frank"))
+# params_3d <- list(c(ktau_to_par(family=families_3d[[1]][[1]], tau=0.2)),
+#                   c(ktau_to_par(family=families_3d[[1]][[2]], tau=0.4)))
+# rotations_3d <- list(list(0,0),0)
+# # Define 5d parameters
+# struct_mat_5d <- matrix(c(2,3,2,1,1,
+#                           3,2,1,2,0,
+#                           1,1,3,0,0,
+#                           4,4,0,0,0,
+#                           5,0,0,0,0), ncol=5, byrow=TRUE)
+# families_5d <- list(list("frank", "gaussian","gaussian","frank"),
+#                     list("frank","gaussian","gaussian"),
+#                     list("gaussian", "frank"),
+#                     list("gaussian"))
+# params_5d <- list(c(ktau_to_par(family=families_5d[[1]][[1]], tau=0.2)),
+#                   c(ktau_to_par(family=families_5d[[1]][[2]], tau=0.3)),
+#                   c(ktau_to_par(family=families_5d[[1]][[3]], tau=0.4)),
+#                   c(ktau_to_par(family=families_5d[[1]][[4]], tau=0.1)))
+# rotations_5d <- list(list(0,0,0,0),list(0,0,0), list(0,0), list(0))
+#
+# struct_mats <- list(struct_mat_3d)
+# families <- list(families_3d)
+# initial_params <- list(params_3d)
+# rotations <- list(rotations_3d)
+# result_plots <- plot_data(num_samples = n_samples_plot,
+#                           dims=dims,
+#                           tau_limits=tau_limits,
+#                           struct_mats = struct_mats,
+#                           families=families,
+#                           initial_params=initial_params,
+#                           rotations=rotations)
+# library(patchwork)
+# length(result_plots)
+# all_pairs_plots <- (result_plots[[1]] + result_plots[[2]] + result_plots[[3]]) /
+#   (result_plots[[4]] + result_plots[[5]] + result_plots[[6]]) /
+#   (result_plots[[7]] + result_plots[[8]] + result_plots[[9]])
+# # all_pairs_plots
+# ggplot2::ggsave(
+#   filename = paste0("3d_non_simplified_all_configs_10000_plot.png"),
+#   plot = all_pairs_plots,
+#   width = 15,
+#   height = 15,
+#   dpi = 300,
+#   bg="white"
+# )
+# # END PAIRS COPULA PLOT
+# # Current data (Alternative: Use Sys.Date())
+# current_date <- "20250616"
+# # Construct the file name with the date
+# num_samples_filename <- paste0(unlist(num_samples), collapse = ",")
+# results_filename <- paste0("results/", current_date,"nSamples", num_samples_filename, ".csv")
+# result_df <- run_simulations(
+#   num_samples=num_samples,
+#   dims=dims,
+#   nus=nus,
+#   tau_limits=tau_limits,
+#   struct_mats=struct_mats,
+#   families=families,
+#   initial_params=initial_params,
+#   rotations=rotations,
+#   filename=results_filename
+#   )
+# head(result_df)
+#
 # q_levs_lower_for_latex <- c(0.05,0.10,0.15,0.2)
 # q_levs_lower_latex_names <- paste0("q", q_levs_lower_for_latex, "geq0")
 # q_levs_upper_for_latex <- c(0.95,0.9,0.85,0.8)
