@@ -958,3 +958,17 @@ cor_facs_temp <- nu_val * temp_k_vals / (1-temp_k_vals)
 cor_facs_temp
 logit_vals <- inv_fun(temp_k_vals)
 exp(as.numeric(logit_vals) + log(nu_val))
+
+
+# WILCOX TEST MANUAL
+test_diffs <- c(1,-1.5,2.4,2.3,-1.7,3.5,2.1,0.5,0.3,0.1,0.7)
+wilcox.test(test_diffs, alternative="greater",exact=FALSE,conf.int=TRUE,conf.level=0.95,
+            correct=FALSE)
+abs_test_diffs <- abs(test_diffs)
+ranks_test_diffs <- rank(abs_test_diffs)
+sum_pos_ranks <- sum(ranks_test_diffs[test_diffs > 0])
+mean_normal_approx <- length(test_diffs) * (length(test_diffs) + 1) / 4
+var_normal_approx <- length(test_diffs) * (length(test_diffs)+1) * (2*length(test_diffs) +1) /24
+std_normal_approx <- sqrt(var_normal_approx)
+std_normal_value_to_eval <- (sum_pos_ranks - mean_normal_approx) / std_normal_approx
+1-pnorm(std_normal_value_to_eval)
