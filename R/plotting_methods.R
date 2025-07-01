@@ -291,7 +291,8 @@ copula_pairs_ggplot <- function(data, uscale = TRUE, method = c("ecdf", "kde1d")
   } else {
     g_body
   }
-  grid::grid.draw(g_final)
+  #grid::grid.draw(g_final)
+  return(g_final)
 }
 
 #' Takes a vector a and returns a function of u (vector of elements between 0 and 1).
