@@ -319,12 +319,25 @@ perform_quant_reg <- function(
     g_vals,
     family_set_name = "nonparametric",
     bottom_quantile_levels = seq(0.05,0.25,0.05),
-    top_quantile_levels = seq(0.75,0.95,0.05)){
-  orig_data <- data.frame(orig_data)
+    top_quantile_levels = seq(0.75,0.95,0.05)
+    ){
+  orig_data <- as.data.frame(orig_data)
   qreg_data <- cbind(g_vals, orig_data)
-  q_reg <- vinereg::vinereg(g_vals ~ . ,family_set=family_set_name, data=qreg_data)
+  q_reg <- vinereg::vinereg(g_vals ~ . ,
+                            family_set=family_set_name,
+                            data=qreg_data)
+  # calculate pinball loss
   bottom_quantiles <- predict(q_reg, newdata=orig_data, alpha=bottom_quantile_levels)
   top_quantiles <- predict(q_reg, newdata=orig_data, alpha=top_quantile_levels)
+  all_quantile_levels <- c(bottom_quantile_levels, top_quantile_levels)
+  dvine_loss <- rep(0,length(all_quantile_levels))
+  dvine_pred <- cbind(bottom_quantiles, top_quantiles)
+  for(i in 1:length(all_quantile_levels)){
+    dvine_loss[i] <- pinball_loss(y_true=g_vals,
+                                  y_pred=dvine_pred[,i],
+                                  tau=all_quantile_levels[i])
+  }
+  # create the output of the relevant fields
   alternative_better <- rep(0,length(bottom_quantile_levels))
   simp_better <- rep(0,length(top_quantile_levels))
   for(i in 1:nrow(orig_data)){
@@ -340,7 +353,9 @@ perform_quant_reg <- function(
     }
   }
   output <- list(alternative_better,
-                 simp_better)
+                 simp_better,
+                 dvine_loss
+                 )
   return(output)
 }
 
@@ -353,21 +368,49 @@ perform_quant_reg <- function(
 #' @param top_quantile_levels: Defaults to c(0.05,0.1). Vector of upper quantiles,
 #' for which it is checked, whether the conditioned quantile estimates are <0.
 #' Tests whether the simplified model is better
-#' @returns: A List of 2 vectors, the first containing the number of samples, for which
+#' @param method: Defaults to "br". Which method to use for the linear quantile regression
+#' @param train_perc: float, defaults to 0.9. What fraction of the data to use for training
+#' @returns: A List of 4 vectors, the first containing the number of samples, for which
 #' q(bottom_quantile_levels) > 0 holds, the second containing the number of samples, for
-#' which q(top_quantile_levels) < 0 holds.
+#' which q(top_quantile_levels) < 0 holds. Behind that train and test pinball loss are listed
 perform_linear_quant_reg <- function(orig_data,
                                      g_vals,
                                      bottom_quantiles_lin=seq(0.05,0.25,0.05),
                                      top_quantiles_lin=seq(0.75,0.95,0.05),
-                                     method="br"){
-  linear_qreg_dataframe <- as.data.frame(orig_data)
+                                     method="br",
+                                     train_perc=0.9){
+  # train test split
+  split_output <- qreg_train_test_split(
+    covariates=orig_data,
+    predictors=g_vals,
+    train_proportion=train_perc
+  )
+  covariates_train <- split_output[[1]]
+  covariates_test <- split_output[[2]]
+  predictors_train <- split_output[[3]]
+  predictors_test <- split_output[[4]]
+  # perform the quantile regression
+  linear_qreg_dataframe <- as.data.frame(covariates_train)
   all_quantiles <- c(bottom_quantiles_lin, top_quantiles_lin)
-  fit_linear_model <- quantreg::rq(g_vals ~ .,
+  fit_linear_model <- quantreg::rq(predictors_train ~ .,
                          data=linear_qreg_dataframe,
                          tau=all_quantiles)
+  # calculate training and test pinball loss
+  train_loss <- rep(0,length(all_quantiles))
+  test_loss <- rep(0, length(all_quantiles))
+  lin_pred_train <-predict(fit_linear_model, newdata=as.data.frame(covariates_train))
+  lin_pred_test <- predict(fit_linear_model, newdata=as.data.frame(covariates_test))
+  for(i in 1:length(all_quantiles)){
+    train_loss[i] <- pinball_loss(y_true=predictors_train,
+                                  y_pred=lin_pred_train[,i],
+                                  tau=all_quantiles[i])
+    test_loss[i] <- pinball_loss(y_true=predictors_test,
+                                 y_pred=lin_pred_test[,i],
+                                 tau=all_quantiles[i])
+  }
+  # create the output of the relevant fields
   preds_lin <- predict(fit_linear_model,
-                       newdata = linear_qreg_dataframe)
+                       newdata = as.data.frame(orig_data))
   alternative_better_lin <- rep(0, length(bottom_quantiles_lin))
   simp_better_lin <- rep(0, length(top_quantiles_lin))
   for(i in 1:nrow(orig_data)){
@@ -382,18 +425,24 @@ perform_linear_quant_reg <- function(orig_data,
       }
     }
   }
-  return(list(alternative_better_lin, simp_better_lin))
+  return(list(alternative_better_lin, simp_better_lin, train_loss, test_loss))
 }
 
 #' performs a Neural Network quantile regression (MCQRNN)
 #' @param orig_data: matrix or dataframe. The observed data.
 #' @param g_vals: Vector. Values g_t from the thesis
-#' @param bottom_quantile_levels: Defaults to c(0.05,0.1). Vector of lower quantiles,
+#' @param bottom_q_NN_train: Vector of lower quantiles, for which the model is fitted
+#' Note: a longer vector here tends to improve the fit but also increase runtime considerably.
+#' Recommendation: Train on no more than every 5 percent quantiles, predict the others with mcqrnn
+#' @param bottom_q_NN_predict: Vector of lower quantiles,
 #' for which it is checked, whether the conditioned quantile estimates are >0.
-#' Tests whether the alternative model is better
-#' @param top_quantile_levels: Defaults to c(0.05,0.1). Vector of upper quantiles,
-#' for which it is checked, whether the conditioned quantile estimates are <0.
-#' Tests whether the simplified model is better
+#' Tests whether the alternative model is better.
+#' @param top_q_NN_train: Vector of top quantiles, for which the model is fitted
+#' Note: a longer vector here tends to improve the fit but also increase runtime considerably.
+#' Recommendation: Train on no more than every 5 percent quantiles, predict the others with mcqrnn
+#' @param top_q_NN_predict: Vector of top quantiles,
+#' for which it is checked, whether the conditioned quantile estimates are >0.
+#' Tests whether the simplified model is better.
 #' @param num.hidden: int, defaults to 10. Number of hidden units in the
 #' single hidden layer of the NN
 #' @param num_trials: int, defaults to 1. Number of repeated fitting procedures
@@ -401,51 +450,109 @@ perform_linear_quant_reg <- function(orig_data,
 #' @param penalty: float, defaults to 0.1. Parameter for weight decay regularization
 #' @param max_iter: int, defaults to 500. Maximum number of iterations of the
 #' optimization algorithm
+#' @param train_perc: float, defaults to 0.9. Fraction of data used for training.
 #' @param user_info: Boolean, defaults to FALSE. If True, diagnostic messages are
 #' printed during optimization
-#' @returns: A List of 2 vectors, the first containing the number of samples, for which
+#' @returns: A List of 4 vectors. The first vector contains the number of samples, for which
 #' q(bottom_quantile_levels) > 0 holds, the second containing the number of samples, for
-#' which q(top_quantile_levels) < 0 holds.
-perform_quant_reg_mcqrnn <- function(orig_data,
-                                     g_vals,
-                                     bottom_quantiles_NN=seq(0.05,0.25,0.05),
-                                     top_quantiles_NN=seq(0.75,0.95,0.05),
-                                     num_hidden = 10,
-                                     num_trials=1,
-                                     penalty=0.1,
-                                     max_iter=500,
-                                     activation = qrnn::sigmoid,
-                                     user_info=FALSE){
-  quantiles_NN <- c(bottom_quantiles_NN, top_quantiles_NN)
-  x_qrnn <- as.matrix(orig_data)
-  y_qrnn <- matrix(g_vals,ncol=1)
+#' which q(top_quantile_levels) < 0 holds. Behind that train and test pinball loss are listed.
+perform_quant_reg_mcqrnn <- function(
+    orig_data,
+    g_vals,
+    bottom_q_NN_train = c(0.01,0.05,0.1,0.15,0.2),
+    bottom_q_NN_predict=seq(0.01,0.2,0.01),
+    top_q_NN_train=c(0.8,0.85,0.9,0.95,0.99),
+    top_q_NN_predict = seq(0.8,0.99,0.01),
+    num_hidden = 10,
+    num_trials=1,
+    penalty=0.1,
+    max_iter=500,
+    activation = qrnn::sigmoid,
+    train_perc = 0.9,
+    user_info=FALSE
+    ){
+  # train test split
+  split_output <- qreg_train_test_split(
+    covariates=orig_data,
+    predictors=g_vals,
+    train_proportion=train_perc
+  )
+  covariates_train <- split_output[[1]]
+  covariates_test <- split_output[[2]]
+  predictors_train <- split_output[[3]]
+  predictors_test <- split_output[[4]]
+  # perform quantile regression
+  q_NN_train <- c(bottom_q_NN_train, top_q_NN_train)
+  x_qrnn <- as.matrix(covariates_train)
+  y_qrnn <- matrix(predictors_train,ncol=1)
   fitted_mcqrnn <- qrnn::mcqrnn.fit(x=x_qrnn,
                               y=y_qrnn,
-                              tau=quantiles_NN,
+                              tau=q_NN_train,
                               n.hidden=num_hidden,
                               n.trials=num_trials,
                               penalty=penalty,
                               Th=activation,
                               iter.max=max_iter,
                               trace=user_info)
-  qrnn_preds <- qrnn::mcqrnn.predict(orig_data, fitted_mcqrnn)
-  alternative_better_qrnn <- rep(0, length(bottom_quantiles_NN))
-  simp_better_qrnn <- rep(0, length(top_quantiles_NN))
+  # calculate training and test pinball loss
+  train_loss <- rep(0,length(q_NN_train))
+  test_loss <- rep(0, length(q_NN_train))
+  qrnn_pred_train <-qrnn::mcqrnn.predict(covariates_train, fitted_mcqrnn, tau=q_NN_train)
+  qrnn_pred_test <- qrnn::mcqrnn.predict(covariates_test, fitted_mcqrnn, tau=q_NN_train)
+  for(i in 1:length(q_NN_train)){
+    train_loss[i] <- pinball_loss(y_true=predictors_train,
+                               y_pred=qrnn_pred_train[,i],
+                               tau=q_NN_train[i])
+    test_loss[i] <- pinball_loss(y_true=predictors_test,
+                              y_pred=qrnn_pred_test[,i],
+                              tau=q_NN_train[i])
+  }
+  q_NN_predict <- c(bottom_q_NN_predict, top_q_NN_predict)
+  qrnn_preds <- qrnn::mcqrnn.predict(orig_data, fitted_mcqrnn, tau=q_NN_predict)
+  alternative_better_qrnn <- rep(0, length(bottom_q_NN_predict))
+  simp_better_qrnn <- rep(0, length(top_q_NN_predict))
   for(i in 1:nrow(orig_data)){
-    for(j in 1:length(bottom_quantiles_NN)){
+    for(j in 1:length(bottom_q_NN_predict)){
       if(qrnn_preds[i,j] > 0){
         alternative_better_qrnn[j] <- alternative_better_qrnn[j] + 1
       }
     }
-    for(j in 1:length(top_quantiles_NN)){
-      if(qrnn_preds[i,(j+length(bottom_quantiles_NN))] < 0){
+    for(j in 1:length(top_q_NN_predict)){
+      if(qrnn_preds[i,(j+length(bottom_q_NN_predict))] < 0){
         simp_better_qrnn[j] <- simp_better_qrnn[j] + 1
       }
     }
   }
-  return(list(alternative_better_qrnn, simp_better_qrnn))
+  return(list(alternative_better_qrnn, simp_better_qrnn, train_loss, test_loss))
 }
 
+#' Calculate the pinball loss (sometimes called check loss)
+#' @param y_true: observed values
+#' @param y_pred: predicted quantiles
+#' @param tau: quantile level (in the thesis this is alpha,
+#' tau for consistency with the other packages)
+#' @returns A number, which is the pinball loss for the given quantile level
+#' alpha, true values y_true and predicted values y_pred
+pinball_loss <- function(y_true, y_pred, tau) {
+  differences <- y_true - y_pred
+  return(mean(pmax(tau * differences, (tau - 1) * differences)))
+}
+
+#' Train Test split for the data used in quantile regression
+#' @param covariates: matrix. The covariates, used to derive conditional quantiles
+#' @param predictors: vector or matrix. The values for which quantiles should be estimated
+#' @param train_proportion: Number, defaults to 0.9. Fraction of the data to use for training
+#' @returns list with 4 elements: covariates_train, covariates_test, predictors_train, predictors_test
+#' (i.e. original covariates and predictors split up randomly)
+qreg_train_test_split <- function(covariates, predictors, train_proportion){
+  num_train <- floor(nrow(covariates) * train_proportion)
+  train_indices <- sample(1:nrow(covariates), size = num_train)
+  covariates_train <- covariates[train_indices,]
+  covariates_test <- covariates[-train_indices,]
+  predictors_train <- predictors[train_indices]
+  predictors_test <- predictors[-train_indices]
+  return(list(covariates_train, covariates_test, predictors_train, predictors_test))
+}
 
 # Example Usage:
 # split_output <- train_test_split(orig_data, simplified_data)

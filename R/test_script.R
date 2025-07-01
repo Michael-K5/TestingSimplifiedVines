@@ -18,7 +18,129 @@ source("R/simulate_non_simplified_vine.R")
 #                  4,0,0,0), nrow=4, byrow=TRUE)
 # max_mat_test <- get_max_matrix(temp)
 # print(max_mat_test)
+u_data <- matrix(c(0.5,0.5,0.5,
+                   0.5,0.4,0.3,
+                   0.2,0.3,0.4,
+                   0.7,0.2,0.3), ncol=3, byrow=TRUE)
+u_row_test <- u_data[3,]
+example_struct_test <- matrix(c(1,1,1,
+                                2,2,0,
+                                3,0,0), ncol=3, byrow=TRUE)
 
+families_test <- list(list("clayton", "clayton"), list("clayton"))
+params_test <- list(c(2),c(1.3))
+simple_test_fun <- function(u,family){
+  return(3)
+}
+max_matrix_test <- get_max_matrix(example_struct_test)
+max_matrix_test
+param_cond_funcs_test = list(list(simple_test_fun))
+rotations_test = list(list(0,0), list(0))
+temp <- log_likelihood_non_simplified(u_data=u_data,
+                                     struct = example_struct_test,
+                                     families=families_test,
+                                     params=params_test,
+                                     param_cond_funcs=param_cond_funcs_test,
+                                     rotations=rotations_test,
+                                     return_vector=TRUE)
+
+
+bicop_1 <- bicop_dist("clayton", 0, c(2))
+bicop_2 <- bicop_dist("clayton", 0, c(1.3))
+bicop_3 <- bicop_dist("clayton", 0, c(3))
+pair_copulas_test <- list(
+  list(bicop_1, bicop_2), # pair-copulas in first tree
+  list(bicop_3) # pair-copulas in second tree
+)
+# set up vine copula model
+vine_cop_dist_obj <- vinecop_dist(pair_copulas_test, example_struct_test)
+temp_actual <- log(dvinecop(u=u_data,vine_cop_dist_obj))
+print("Own implementation:")
+print(temp)
+sum(temp)
+print("Real Implementation:")
+print(temp_actual)
+sum(temp_actual)
+
+
+# Test 2
+
+u_data_5 <- matrix(c(0.5,0.5,0.5,0.5,0.5,
+                     0.5,0.4,0.3,0.2,0.1,
+                     0.2,0.3,0.4,0.5,0.6,
+                     0.7,0.2,0.3,0.4,0.5), ncol=5, byrow=TRUE)
+u_row_test <- u_data_5[3,]
+example_struct_test <- matrix(c(2,3,2,1,1,
+                                3,2,1,2,0,
+                                1,1,3,0,0,
+                                4,4,0,0,0,
+                                5,0,0,0,0), ncol=5, byrow=TRUE)
+example_struct_test <- matrix(c(4,1,4,3,3,
+                                1,4,3,4,0,
+                                3,3,1,0,0,
+                                2,2,0,0,0,
+                                5,0,0,0,0), ncol=5, byrow=TRUE)
+# matrix(c(1,1,1,1,1,
+#                                 2,2,2,2,0,
+#                                 3,3,3,0,0,
+#                                 4,4,0,0,0,
+#                                 5,0,0,0,0), ncol=5, byrow=TRUE)
+
+families_test <- list(list("clayton", "clayton", "clayton", "clayton"),
+                      list("clayton", "clayton", "clayton"),
+                      list("clayton", "clayton"),
+                      list("clayton"))
+params_test <- list(c(1.3),c(2), c(3),c(4))
+simple_test_fun_1 <- function(u,family){
+  return(5)
+}
+simple_test_fun_2 <- function(u,family){
+  return(6)
+}
+simple_test_fun_3 <- function(u,family){
+  return(7)
+}
+max_matrix_test <- get_max_matrix(example_struct_test)
+max_matrix_test
+param_cond_funcs_test = list(list(simple_test_fun_1, simple_test_fun_2, simple_test_fun_3),
+                             list(simple_test_fun_1, simple_test_fun_2),
+                             list(simple_test_fun_3))
+rotations_test = list(list(0,0,0,0),
+                      list(0,0,0),
+                      list(0,0),
+                      list(0))
+temp <- log_likelihood_non_simplified(u_data=u_data_5,
+                                     struct = example_struct_test,
+                                     families=families_test,
+                                     params=params_test,
+                                     param_cond_funcs=param_cond_funcs_test,
+                                     rotations=rotations_test,
+                                     return_vector=TRUE)
+bicop_1 <- bicop_dist("clayton", 0, c(1.3))
+bicop_2 <- bicop_dist("clayton", 0, c(2))
+bicop_3 <- bicop_dist("clayton", 0, c(3))
+bicop_4 <- bicop_dist("clayton", 0, c(4))
+bicop_5 <- bicop_dist("clayton", 0, c(5))
+bicop_6 <- bicop_dist("clayton", 0, c(6))
+bicop_7 <- bicop_dist("clayton", 0, c(7))
+bicop_8 <- bicop_dist("clayton", 0, c(5))
+bicop_9 <- bicop_dist("clayton", 0, c(6))
+bicop_10 <- bicop_dist("clayton", 0, c(7))
+pair_copulas_test <- list(
+  list(bicop_1, bicop_2, bicop_3, bicop_4), # pair-copulas in first tree
+  list(bicop_5, bicop_6, bicop_7), # pair-copulas in second tree
+  list(bicop_8, bicop_9),
+  list(bicop_10)
+)
+# set up vine copula model
+vine_cop_dist_obj <- vinecop_dist(pair_copulas_test, example_struct_test)
+temp_actual <- log(dvinecop(u=u_data_5,vine_cop_dist_obj))
+print("Own implementation:")
+print(temp)
+sum(temp)
+print("Real Implementation:")
+print(temp_actual)
+sum(temp_actual)
 library(vinereg)
 # define data
 # testdata -> delete later.
@@ -43,13 +165,25 @@ for (i in 1:length(r_vals)){
 
 
 # test uniform margins
-last_data_simulation_date <- "2025-04-23"
-data_dim <- "4"
+last_data_simulation_date <- "2025-06-02"
+data_dim <- "5"
 # load data
 csv_filename <- paste0("data/non_simplified_sim_",data_dim,"d_",last_data_simulation_date,".csv")
 orig_data <- as.matrix(read.csv(csv_filename))
 orig_data <- unname(orig_data) #remove col- and rownames
+temp_fit_vine <- vinecop(orig_data, family="parametric")
+npars(temp_fit_vine)
+# Assume `fit` is your vinecop model from rvinecopulib
+num_params <- sum(sapply(temp_fit_vine$pair_copulas, function(pc) {
+  # Each pc is a matrix (upper triangular) of pair copula objects
+  sum(sapply(pc, function(cop) {
+    if (is.null(cop)) return(0)
+    length(cop$parameters)
+  }))
+}))
 
+print(num_params)
+summary(temp_fit_vine)
 for(i in 1:data_dim){
   hist(orig_data[,i], main = paste("Plot Number", i), probability=TRUE, breaks=seq(0,1,by=0.05))
 }
@@ -744,3 +878,83 @@ aggregated_df
 # However, for the other values the results seem a bit odd, maybe the model is too noisy in those cases.
 # Try to evaluate the quantiles with 0.9 or 0.85 as well -> maybe they also indicate that the simplified model
 # is better in some of those cases. Then it's definitely just noisy measurements.
+
+
+
+# Test log likelihood ratio test
+source("R/classifier_methods.R")
+library(keras)
+library(rvinecopulib)
+# Parameters to determine, which model and data to load.
+last_data_simulation_date <- "2025-06-02"
+last_train_date <- "2025-06-02"
+data_dim <- "5"
+nu <- 4 # T_n/T_c, the ratio of noise to observed samples during training
+# load the Neural Network Classifier
+model_path <- paste0("models/NN_", data_dim, "d_", last_train_date, ".keras")
+model <- load_model_hdf5(model_path)
+# load the fitted simplified vine
+cop_path <- paste0("models/copula_",data_dim,"d_", last_train_date,".rds")
+fitted_vine <- readRDS(file = cop_path)
+# load the original data
+csv_filename <- paste0("data/non_simplified_sim_",data_dim,"d_",last_data_simulation_date,".csv")
+orig_data <- as.matrix(read.csv(csv_filename))
+orig_data <- unname(orig_data) #remove col- and rownames
+
+# on the train and on the test set
+log_lik_simplified_temp <- sum(log(dvinecop(orig_data, fitted_vine)))
+log_lik_NN_temp <- sum(log(non_param_cop(
+  model=model,
+  fitted_vine=fitted_vine,
+  obs=orig_data,
+  nu=4)))
+
+NN_num_params <- count_NN_params(weights=model$weights)
+simp_cop_num_params <- get_num_cop_params(fitted_vine)
+deg_free = NN_num_params - simp_cop_num_params
+ratio_test_statistic <- -2*(log_lik_simplified_temp - log_lik_NN_temp)
+p_value <- pchisq(ratio_test_statistic, df = deg_free, lower.tail = FALSE)
+
+# Print the results
+cat("Likelihood Ratio Test Results:\n")
+cat("  LRT Statistic: ", ratio_test_statistic, "\n")
+cat("  Degrees of Freedom: ", deg_free, "\n")
+cat("  P-value: ", p_value, "\n")
+x_vals <- 0:1000
+y_vals <- pchisq(x_vals, df=deg_free, lower.tail=TRUE)
+plot(x_vals, y_vals, col="blue", ylab="pchisq", xlab="x", main=paste0("Chisq with ", deg_free, " degrees of freedom"))
+# You can also add a conclusion based on the p-value
+if (p_value < 0.05) { # Using a common significance level of 0.05
+  cat("  Conclusion: The larger model (general_model) provides a significantly better fit than the smaller model (simp_mod).\n")
+} else {
+  cat("  Conclusion: There is no significant evidence that the larger model (general_model) provides a better fit than the smaller model (simp_mod).\n")
+}
+
+forward_fun <- function(x){
+  return(keras::k_sigmoid(x))
+}
+
+inv_fun <- function(y){
+  return(log(y/(1-y)))
+}
+
+inv_fun_keras <- function(y){
+  return(tensorflow::tf$math$log(
+    tensorflow::tf$math$divide(y,
+                               tensorflow::tf$math$subtract(
+                                 tensorflow::tf$constant(1,dtype=tensorflow::tf$float32),
+                                 y))))
+}
+temp_vals <- seq(0.05,0.95,0.05)
+print(forward_fun(inv_fun(temp_vals)))
+print(forward_fun(inv_fun_keras(temp_vals)))
+temp_vals_2 <- seq(-10,10,1)
+print(inv_fun(forward_fun(temp_vals_2)))
+print(inv_fun_keras(forward_fun(temp_vals_2)))
+# correction factors are nu * k/1-k (k in (0,1))
+nu_val <- 1
+temp_k_vals <- seq(0.05,0.95,0.05)
+cor_facs_temp <- nu_val * temp_k_vals / (1-temp_k_vals)
+cor_facs_temp
+logit_vals <- inv_fun(temp_k_vals)
+exp(as.numeric(logit_vals) + log(nu_val))
