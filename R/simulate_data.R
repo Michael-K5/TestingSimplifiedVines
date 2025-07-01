@@ -49,10 +49,19 @@ sim_5d_linear <- function(num_samples,
                                        rotations = list(list(0,0,0,0),list(0,0,0), list(0,0), list(0)))
   return(u_data)
 }
-tau_lower=0.001
-tau_upper=0.9
-u_linear <- sim_5d_linear(10000, tau_lower=tau_lower, tau_upper=tau_upper)
+u_linear <- sim_5d_linear(10000, tau_lower=-0.92, tau_upper=0.92)
 pairs_copula_data(u_linear)
+pairs_plot_lin <- copula_pairs_ggplot(u_linear)
+pairs_plot_lin <- ggplotify::as.ggplot(pairs_plot_lin)
+pairs_plot_lin
+ggplot2::ggsave(
+  filename = paste0("linear_simulation_plot_10000_Ex37.png"),
+  plot = pairs_plot_lin,
+  width = 6,
+  height = 6,
+  dpi = 300,
+  bg="white"
+)
 #fit.struct_mat<-vinecop(u_linear,family_set="onepar",structure=struct_mat)
 #print.data.frame(summary(fit.struct_mat),digit=2)
 plot_contours_1d(param_cond_func_1d=u_to_param_linear(c(1)), family_vals=c("frank", "gaussian", "joe"))
@@ -106,7 +115,7 @@ sim_5d_quadratic <- function(num_samples, tau_lower=0.001, tau_upper=0.92){
                                        rotations = list(list(0,0,0,0),list(0,0,0), list(0,0), list(0)))
   return(u_data)
 }
-u_5d_quad <- sim_5d_quadratic(5000)
+u_5d_quad <- sim_5d_quadratic(10000)
 pairs_copula_data(u_5d_quad)
 
 
@@ -159,7 +168,7 @@ sim_5d_cubic <- function(num_samples, tau_lower=0.001, tau_upper=0.9){
                                        rotations = list(list(0,0,0,0),list(0,0,0), list(0,0), list(0)))
   return(u_data)
 }
-u_5d_cubic <- sim_5d_cubic(5000)
+u_5d_cubic <- sim_5d_cubic(10000)
 pairs_copula_data(u_5d_cubic)
 
 # Simulate different data
