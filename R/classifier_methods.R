@@ -497,15 +497,16 @@ perform_quant_reg_mcqrnn <- function(
   # calculate training and test pinball loss
   train_loss <- rep(0,length(q_NN_train))
   test_loss <- rep(0, length(q_NN_train))
-  qrnn_pred_train <-qrnn::mcqrnn.predict(covariates_train, fitted_mcqrnn, tau=q_NN_train)
-  qrnn_pred_test <- qrnn::mcqrnn.predict(covariates_test, fitted_mcqrnn, tau=q_NN_train)
-  for(i in 1:length(q_NN_train)){
+  q_NN_predict <- c(bottom_q_NN_predict, top_q_NN_predict)
+  qrnn_pred_train <-qrnn::mcqrnn.predict(covariates_train, fitted_mcqrnn, tau=q_NN_predict)
+  qrnn_pred_test <- qrnn::mcqrnn.predict(covariates_test, fitted_mcqrnn, tau=q_NN_predict)
+  for(i in 1:length(q_NN_predict)){
     train_loss[i] <- pinball_loss(y_true=predictors_train,
                                y_pred=qrnn_pred_train[,i],
-                               tau=q_NN_train[i])
+                               tau=q_NN_predict[i])
     test_loss[i] <- pinball_loss(y_true=predictors_test,
                               y_pred=qrnn_pred_test[,i],
-                              tau=q_NN_train[i])
+                              tau=q_NN_predict[i])
   }
   q_NN_predict <- c(bottom_q_NN_predict, top_q_NN_predict)
   qrnn_preds <- qrnn::mcqrnn.predict(orig_data, fitted_mcqrnn, tau=q_NN_predict)

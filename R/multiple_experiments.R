@@ -102,6 +102,8 @@ run_simulations <- function(num_samples,
                             rotations,
                             lower_q_levs = seq(0.01,0.25,0.01),
                             upper_q_levs = seq(0.75,0.99,0.01),
+                            bottom_q_NN_train = c(0.01,0.05,0.1,0.15,0.2,0.25),
+                            top_q_NN_train=c(0.75,0.8,0.85,0.9,0.95,0.99),
                             int_bottom_threshold = 0.6,
                             int_top_threshold = 1.9,
                             max_retries = 3,
@@ -259,9 +261,25 @@ run_simulations <- function(num_samples,
                                         fitted_vine = fitted_vine,
                                         nu=nu_var,
                                         data_dim_if_unif = ncol(orig_data),
-                                        n_samples=50000,
+                                        n_samples=20000,
                                         user_info=FALSE)
           }
+          log_lik_true_train <- log_likelihood_non_simplified(
+            u_data=x_train,
+            struct = struct_mat_var,
+            families=families_var,
+            params = params_var,
+            param_cond_funcs = param_cond_func_var[[par_idx]],
+            rotations = rotations_var,
+            return_vector=FALSE)
+          log_lik_true_test <- log_likelihood_non_simplified(
+            u_data=x_test,
+            struct = struct_mat_var,
+            families=families_var,
+            params = params_var,
+            param_cond_funcs = param_cond_func_var[[par_idx]],
+            rotations = rotations_var,
+            return_vector=FALSE)
           # evaluate log likelihoods of original data (on train and test set fractions of orig_data)
           log_lik_simp_train_orig <- sum(log(dvinecop(x_train[y_train==1,], fitted_vine)))
           log_lik_NN_train_orig <- sum(log(non_param_cop(
@@ -278,19 +296,45 @@ run_simulations <- function(num_samples,
           # get number of model parameters and degrees of freedom for the log likelihood ratio test
           NN_num_params <- count_NN_params(weights=model$weights)
           simp_cop_num_params <- get_num_cop_params(fitted_vine)
-          deg_free <- NN_num_params - simp_cop_num_params
+          deg_free <- NN_num_params # 20250702 changed! removed -simp_cop_num_params
           # log likelihood ratio test statistic
           LRT_stat_train <- -2*(as.numeric(log_lik_simp_train_orig) - as.numeric(log_lik_NN_train_orig))
           LRT_stat_test <- -2*(as.numeric(log_lik_simp_test_orig) - as.numeric(log_lik_NN_test_orig))
+          LRT_stat_overall <- LRT_stat_train + LRT_stat_test
           # compute p(chisq(df=deg_free) > LRT_stat) (for train and test set)
           p_value_train <- pchisq(LRT_stat_train, df = deg_free, lower.tail = FALSE)
           p_value_test <- pchisq(LRT_stat_test, df = deg_free, lower.tail = FALSE)
+          p_value_overall <- pchisq(LRT_stat_overall, df=deg_free, lower.tail=FALSE)
           # compute AIC and BIC for the NN and simplified model
           AIC_NN <- 2*(NN_num_params + simp_cop_num_params) - 2* (log_lik_NN_train_orig + log_lik_NN_test_orig)
           AIC_simp <- 2*simp_cop_num_params - 2*(log_lik_simp_train_orig + log_lik_simp_test_orig)
           BIC_NN <- log(nrow(orig_data))*(NN_num_params + simp_cop_num_params) - 2* (log_lik_NN_train_orig + log_lik_NN_test_orig)
           BIC_simp <- log(nrow(orig_data))*simp_cop_num_params - 2*(log_lik_simp_train_orig + log_lik_simp_test_orig)
           # End likelihood ratio test
+          # paired wilcoxon and t test
+          log_cor_facs <- log(correction_factors(model, obs=orig_data, nu=nu_var))
+          wilcox_results <- wilcox.test(
+            log_cor_facs,
+            alternative="two.sided",
+            mu=0,
+            exact=FALSE,
+            conf.int=TRUE,
+            conf.level=0.95
+          )
+          wilcox_test_statistic <- wilcox_results$statistic
+          wilcox_p_value <- wilcox_results$p.value
+          wilcox_conf_int_bottom <- wilcox_results$conf.int[1]
+          wilcox_conf_int_top <- wilcox_results$conf.int[2]
+          t_test_results <- t.test(
+            log_cor_facs,
+            alternative="two.sided",
+            mu=0
+          )
+          t_test_statistic <- t_test_results$statistic
+          t_test_p_value <- t_test_results$p.value
+          t_test_conf_int_bottom <- t_test_results$conf.int[1]
+          t_test_conf_int_top <- t_test_results$conf.int[2]
+          # End Wilcoxon and t test
           # Perform D-Vine Quantile regression (parametric)
           g_vals <- compute_gvals(model, orig_data, nu=nu_var)
           qreg_par_output <- perform_quant_reg(orig_data,
@@ -309,19 +353,40 @@ run_simulations <- function(num_samples,
             orig_data,
             g_vals,
             bottom_quantiles_lin =lower_q_levs,
-            top_quantiles_lin =upper_q_levs)
+            top_quantiles_lin =upper_q_levs,
+            train_perc=0.9)
+          # MCQRNN
+          mcqrnn_output <- perform_quant_reg_mcqrnn(
+            orig_data=orig_data,
+            g_vals=g_vals,
+            bottom_q_NN_train = bottom_q_NN_train,
+            bottom_q_NN_predict=lower_q_levs,
+            top_q_NN_train=top_q_NN_train,
+            top_q_NN_predict = upper_q_levs,
+            num_hidden = 10,
+            train_perc=0.9,
+            user_info=FALSE
+          )
           # Store the results of the current iteration
           current_result <- c(num_samples[[sample_idx]],
                               nus[[sample_idx]],
                               dims[[dim_idx]],
-                              tau_limits[[tau_idx]],
+                              tau_limits[[tau_idx]], # this is a vector with 2 elements
                               par_idx,
                               qreg_par_output[[1]],
                               qreg_par_output[[2]],
+                              qreg_par_output[[3]],
                               qreg_nonpar_output[[1]],
                               qreg_nonpar_output[[2]],
+                              qreg_nonpar_output[[3]],
                               lin_qreg_output[[1]],
                               lin_qreg_output[[2]],
+                              lin_qreg_output[[3]],
+                              lin_qreg_output[[4]],
+                              mcqrnn_output[[1]],
+                              mcqrnn_output[[2]],
+                              mcqrnn_output[[3]],
+                              mcqrnn_output[[4]],
                               train_set_eval[[1]],
                               train_set_eval[[2]],
                               test_set_eval[[1]],
@@ -329,19 +394,31 @@ run_simulations <- function(num_samples,
                               int_val,
                               log_lik_simp_train_orig,
                               log_lik_NN_train_orig,
+                              log_lik_true_train,
                               log_lik_simp_test_orig,
                               log_lik_NN_test_orig,
+                              log_lik_true_test,
                               NN_num_params,
                               simp_cop_num_params,
                               deg_free,
                               LRT_stat_train,
                               LRT_stat_test,
+                              LRT_stat_overall,
                               p_value_train,
                               p_value_test,
+                              p_value_overall,
                               AIC_NN,
                               AIC_simp,
                               BIC_NN,
-                              BIC_simp
+                              BIC_simp,
+                              wilcox_test_statistic,
+                              wilcox_p_value,
+                              wilcox_conf_int_bottom,
+                              wilcox_conf_int_top,
+                              t_test_statistic,
+                              t_test_p_value,
+                              t_test_conf_int_bottom,
+                              t_test_conf_int_top
                               )
           # append to the results list, as a list, to keep the rows separated
           all_results <- append(all_results, list(current_result))
@@ -352,26 +429,43 @@ run_simulations <- function(num_samples,
   # Summarize the results in a dataframe
   results_df <- as.data.frame(do.call(rbind, all_results))
   # Give better names to the parametric quantile columns of the dataframe
-  lower_quantile_par_names <- paste0("onepar-q", lower_q_levs, "geq0")
-  upper_quantile_par_names <- paste0("onepar-q", upper_q_levs, "leq0")
+  lower_quantile_par_names <- paste0("oneparQ", lower_q_levs, "geq0")
+  upper_quantile_par_names <- paste0("oneparQ", upper_q_levs, "leq0")
+  pinball_loss_par_names <- paste0("pinballOnepar",c(lower_q_levs, upper_q_levs))
   # Give better names to the nonparametric quantile columns of the dataframe
-  lower_quantile_nonpar_names <- paste0("nonpar-q", lower_q_levs, "geq0")
-  upper_quantile_nonpar_names <- paste0("nonpar-q", upper_q_levs, "leq0")
+  lower_quantile_nonpar_names <- paste0("nonparQ", lower_q_levs, "geq0")
+  upper_quantile_nonpar_names <- paste0("nonparQ", upper_q_levs, "leq0")
+  pinball_loss_nonpar_names <- paste0("pinballNonpar", c(lower_q_levs, upper_q_levs))
   # Give better names to the linear quantile columns of the dataframe
-  lower_quantile_lin_names <- paste0("lin-q", lower_q_levs, "geq0")
-  upper_quantile_lin_names <- paste0("lin-q", upper_q_levs, "leq0")
+  lower_quantile_lin_names <- paste0("linQ", lower_q_levs, "geq0")
+  upper_quantile_lin_names <- paste0("linQ", upper_q_levs, "leq0")
+  pinball_loss_lin_train_names <- paste0("pinballLin", c(lower_q_levs, upper_q_levs), "Train")
+  pinball_loss_lin_test_names <- paste0("pinballLin", c(lower_q_levs, upper_q_levs), "Test")
+  # mcqrnn columns
+  lower_quantile_mcqrnn_names <- paste0("qrnn", lower_q_levs, "geq0")
+  upper_quantile_mcqrnn_names <- paste0("qrnn", upper_q_levs,"leq0")
+  pinball_loss_mcqrnn_train_names <- paste0("pinballQrnn", c(lower_q_levs, upper_q_levs), "Train")
+  pinball_loss_mcqrnn_test_names <- paste0("pinballQrnn", c(lower_q_levs, upper_q_levs), "Train")
   colnames(results_df) <- c("num_samples",
                             "nu",
                             "dim",
-                            "tau_lower",
-                            "tau_upper",
+                            "tau_min",
+                            "tau_max",
                             "param_cond_func_idx",
                             lower_quantile_par_names,
                             upper_quantile_par_names,
+                            pinball_loss_par_names,
                             lower_quantile_nonpar_names,
                             upper_quantile_nonpar_names,
+                            pinball_loss_nonpar_names,
                             lower_quantile_lin_names,
                             upper_quantile_lin_names,
+                            pinball_loss_lin_train_names,
+                            pinball_loss_lin_test_names,
+                            lower_quantile_mcqrnn_names,
+                            upper_quantile_mcqrnn_names,
+                            pinball_loss_mcqrnn_train_names,
+                            pinball_loss_mcqrnn_test_names,
                             "train set loss",
                             "train set accuracy",
                             "test set loss",
@@ -379,19 +473,31 @@ run_simulations <- function(num_samples,
                             "MC_Integral",
                             "log_lik_simp_train_orig",
                             "log_lik_NN_train_orig",
+                            "log_lik_true_train",
                             "log_lik_simp_test_orig",
                             "log_lik_NN_test_orig",
+                            "log_lik_true_test",
                             "NN_num_params",
                             "simp_cop_num_params",
                             "deg_free",
                             "LRT_stat_train",
                             "LRT_stat_test",
+                            "LRT_stat_overall",
                             "p_value_train",
                             "p_value_test",
+                            "p_value_overall",
                             "AIC_NN",
                             "AIC_simp",
                             "BIC_NN",
-                            "BIC_simp")
+                            "BIC_simp",
+                            "wilcox_test_statistic",
+                            "wilcox_p_value",
+                            "wilcox_conf_int_bottom",
+                            "wilcox_conf_int_top",
+                            "t_test_statistic",
+                            "t_test_p_value",
+                            "t_test_conf_int_bottom",
+                            "t_test_conf_int_top")
   if(filename != ""){
     write.csv(results_df, file = filename, row.names = FALSE)
     print(paste("Data saved to:", filename))
